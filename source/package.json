@@ -1,0 +1,15 @@
+{
+  "name": "activity-manager",
+  "version": "0.1.0",
+  "description": "Serviço desktop local para anotar atividades, receber alertas e acompanhar produtividade",
+  "main": "electron.js",
+  "scripts": {
+    "start": "GTK_USE_PORTAL=0 electron .",
+    "dev": "GTK_USE_PORTAL=0 electron . --dev"
+  },
+  "author": "Matheus <matheuslajazem@gmail.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "33.4.11"
+  }
+}
