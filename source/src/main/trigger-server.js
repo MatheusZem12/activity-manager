@@ -7,7 +7,8 @@
  * de texto — a janela rápida abre em milissegundos.
  *
  * A porta só aceita conexões de 127.0.0.1 e os únicos comandos aceitos são
- * "quick" e "open" (abrir uma janela). Nada de dados entra ou sai por aqui.
+ * "quick" (nova atividade), "clip" (novo texto), "panel" e "open" (abrir o
+ * painel). Nada de dados entra ou sai por aqui.
  */
 const net = require('net');
 const fs = require('fs');
@@ -34,7 +35,7 @@ function start(onCommand) {
 
       socket.once('data', (data) => {
         const command = data.toString().trim().toLowerCase();
-        if (command === 'quick' || command === 'open') {
+        if (command === 'quick' || command === 'clip' || command === 'panel' || command === 'open') {
           onCommand(command);
           socket.end('ok\n');
         } else {

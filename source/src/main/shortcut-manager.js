@@ -1,15 +1,18 @@
 /**
- * Registro do atalho global — feito pelo próprio serviço.
+ * Registro dos atalhos globais — feito pelo próprio serviço.
  *
- * O atalho é definido na tela de Configurações do app; daqui ele é aplicado no
- * ambiente gráfico. O usuário nunca precisa editar config de compositor.
+ * São três atalhos: um abre a janela rápida de atividade, outro a janela rápida
+ * de texto do clipboard, e o terceiro abre/foca o painel lateral. Todos são
+ * definidos na tela de Configurações do app; daqui são aplicados no ambiente
+ * gráfico. O usuário nunca precisa editar config de compositor.
  *
  *   Hyprland/Wayland: escrevemos um arquivo de config gerenciado por nós
  *     (~/.config/hypr/activity-manager.conf), garantimos um `source =` para ele
- *     no hyprland.conf e pedimos `hyprctl reload`. O bind chama bin/am-trigger.sh,
- *     que acorda o serviço que já está rodando.
+ *     no hyprland.conf e pedimos `hyprctl reload`. Cada bind chama
+ *     bin/am-trigger.sh com o argumento (quick|clip), que acorda o serviço que
+ *     já está rodando.
  *
- *   X11: o Electron consegue registrar o atalho sozinho (globalShortcut).
+ *   X11: o Electron consegue registrar os atalhos sozinho (globalShortcut).
  */
 const fs = require('fs');
 const os = require('os');
@@ -17,15 +20,16 @@ const path = require('path');
 const { globalShortcut } = require('electron');
 
 const hypr = require('./hypr');
+const { WM_CLASS, QUICK_WINDOW_TITLE, CLIP_WINDOW_TITLE, PANEL_WINDOW_TITLE } = require('./window-identity');
 
 const MANAGED_FILE = path.join(os.homedir(), '.config', 'hypr', 'activity-manager.conf');
 const HYPRLAND_CONF = path.join(os.homedir(), '.config', 'hypr', 'hyprland.conf');
 const SOURCE_LINE = 'source = ~/.config/hypr/activity-manager.conf';
 
 // Precisam bater com o que o Electron reporta ao compositor (veja electron.js).
-const WM_CLASS = 'activity-manager';
-const QUICK_WINDOW_TITLE = 'Nova atividade';
 const QUICK_MATCH = `match:class ^(${WM_CLASS})$, match:title ^(${QUICK_WINDOW_TITLE})$`;
+const CLIP_MATCH = `match:class ^(${WM_CLASS})$, match:title ^(${CLIP_WINDOW_TITLE})$`;
+const PANEL_MATCH = `match:class ^(${WM_CLASS})$, match:title ^(${PANEL_WINDOW_TITLE})$`;
 
 const TRIGGER_SCRIPT = path.join(__dirname, '..', '..', 'bin', 'am-trigger.sh');
 const ELECTRON_BIN = path.join(__dirname, '..', '..', 'node_modules', 'electron', 'dist', 'electron');
@@ -92,9 +96,53 @@ function parseAccelerator(accelerator) {
   return { modifiers, key: hyprKey };
 }
 
-function managedConfigContents({ modifiers, key }, { startOnLogin }) {
-  const mods = modifiers.join(' ');
-  const autostart = startOnLogin
+/**
+ * Regras do painel de atividades (a janela que substituiu a antiga janela
+ * principal). A geometria depende do lado escolhido: à direita, a janela
+ * encosta na borda direita; à esquerda, na borda esquerda. O `size` reserva
+ * 420px de largura e 90% da altura — mesma geometria calculada em electron.js.
+ *
+ * Atenção à sintaxe do `move`: no Hyprland 0.55 ele espera **expressões entre
+ * parênteses** com as variáveis monitor_w/monitor_h/window_w/window_h. A forma
+ * com percentuais ("move 100%-w-8 5%") não é aceita e — o pior — falha em
+ * *silêncio*: `hyprctl configerrors` não acusa nada, a regra simplesmente não
+ * se aplica e o compositor centraliza a janela float. Verificado na 0.55.2.
+ */
+function panelWindowRules(config) {
+  const move = config.panelSide === 'left'
+    ? 'move 8 (monitor_h*0.05)'
+    : 'move (monitor_w-window_w-8) (monitor_h*0.05)';
+  return `# Painel (ajusta size/move conforme panelSide).
+#
+# Sem stay_focused aqui, de propósito — ao contrário das janelas de captura,
+# o painel FICA aberto. Com stay_focused ele prenderia o teclado e você não
+# conseguiria digitar em mais nenhuma janela enquanto ele estivesse na tela.
+windowrule = float on, ${PANEL_MATCH}
+windowrule = size 420 90%, ${PANEL_MATCH}
+windowrule = ${move}, ${PANEL_MATCH}
+windowrule = pin on, ${PANEL_MATCH}`;
+}
+
+function bindBlock(combo, arg) {
+  const mods = combo.modifiers.join(' ');
+  return `# Sobrescreve qualquer bind anterior nesta combinação.
+unbind = ${mods}, ${combo.key}
+bind = ${mods}, ${combo.key}, exec, ${TRIGGER_SCRIPT} ${arg}`;
+}
+
+/**
+ * Regras das duas janelas de captura (atividade e texto). São iguais: flutuam
+ * centralizadas sobre o layout e seguram o foco.
+ */
+function captureWindowRules(match) {
+  return `windowrule = float on, ${match}
+windowrule = center on, ${match}
+windowrule = pin on, ${match}
+windowrule = stay_focused on, ${match}`;
+}
+
+function managedConfigContents({ quick, clip, panel }, config) {
+  const autostart = config.startOnLogin
     ? `# O serviço sobe junto com a sessão e fica na bandeja.
 exec-once = env -u ELECTRON_RUN_AS_NODE GTK_USE_PORTAL=0 ${ELECTRON_BIN} ${SOURCE_DIR} --hidden
 
@@ -105,21 +153,24 @@ exec-once = env -u ELECTRON_RUN_AS_NODE GTK_USE_PORTAL=0 ${ELECTRON_BIN} ${SOURC
 # Este arquivo é reescrito toda vez que você salva as configurações do app.
 # Para desligar tudo, remova o "source" deste arquivo do hyprland.conf.
 
-${autostart}# Sobrescreve qualquer bind anterior nesta combinação.
-unbind = ${mods}, ${key}
-bind = ${mods}, ${key}, exec, ${TRIGGER_SCRIPT}
+${autostart}${bindBlock(quick, 'quick')}
+${bindBlock(clip, 'clip')}
+${bindBlock(panel, 'panel')}
 
-# A janela rápida precisa flutuar sobre o layout, e não entrar no tiling.
+# As janelas de captura precisam flutuar sobre o layout, e não entrar no tiling.
 # (sintaxe de window rules do Hyprland 0.53+; os booleanos exigem "on")
-windowrule = float on, ${QUICK_MATCH}
-windowrule = center on, ${QUICK_MATCH}
-windowrule = pin on, ${QUICK_MATCH}
-
-# Segura o foco na janela rápida enquanto ela estiver aberta. Sem isto, o
+#
+# O stay_focused segura o foco enquanto elas estiverem abertas. Sem isto, o
 # "mouse_refocus" do Hyprland devolve o foco para a janela que está embaixo do
-# cursor e a janela rápida se fecharia sozinha antes de você digitar. É o mesmo
-# recurso que os lançadores (walker, rofi) usam. Fecha com Esc ou ao salvar.
-windowrule = stay_focused on, ${QUICK_MATCH}
+# cursor e a janela de captura se fecharia sozinha antes de você digitar. É o
+# mesmo recurso que os lançadores (walker, rofi) usam.
+# Nova atividade:
+${captureWindowRules(QUICK_MATCH)}
+
+# Novo texto (clipboard):
+${captureWindowRules(CLIP_MATCH)}
+
+${panelWindowRules(config)}
 `;
 }
 
@@ -136,24 +187,28 @@ function ensureSourceLine() {
 
   if (contents.includes('activity-manager.conf')) return false;
 
-  const addition = `\n# Atalho do Activity Manager (gerenciado pelo app)\n${SOURCE_LINE}\n`;
+  const addition = `\n# Atalhos do Activity Manager (gerenciado pelo app)\n${SOURCE_LINE}\n`;
   fs.writeFileSync(HYPRLAND_CONF, `${contents.trimEnd()}\n${addition}`, 'utf-8');
   return true;
 }
 
 async function applyOnHyprland(config) {
-  const combo = parseAccelerator(config.globalShortcut);
-  if (!combo) {
+  const quick = parseAccelerator(config.globalShortcut);
+  const clip = parseAccelerator(config.globalShortcutClip);
+  const panel = parseAccelerator(config.globalShortcutPanel);
+  if (!quick || !clip || !panel) {
     return {
       registered: false,
       environment: 'hyprland',
       shortcut: config.globalShortcut,
+      shortcutClip: config.globalShortcutClip,
+      shortcutPanel: config.globalShortcutPanel,
       error: 'Atalho inválido. Use uma combinação com pelo menos um modificador (ex: Ctrl+Alt+A).'
     };
   }
 
   fs.mkdirSync(path.dirname(MANAGED_FILE), { recursive: true });
-  fs.writeFileSync(MANAGED_FILE, managedConfigContents(combo, config), 'utf-8');
+  fs.writeFileSync(MANAGED_FILE, managedConfigContents({ quick, clip, panel }, config), 'utf-8');
 
   const addedSource = ensureSourceLine();
   await hypr.reload();
@@ -164,6 +219,8 @@ async function applyOnHyprland(config) {
       registered: false,
       environment: 'hyprland',
       shortcut: config.globalShortcut,
+      shortcutClip: config.globalShortcutClip,
+      shortcutPanel: config.globalShortcutPanel,
       managedFile: MANAGED_FILE,
       error: `O Hyprland recusou a configuração: ${errors}`
     };
@@ -173,32 +230,55 @@ async function applyOnHyprland(config) {
     registered: true,
     environment: 'hyprland',
     shortcut: config.globalShortcut,
+    shortcutClip: config.globalShortcutClip,
+    shortcutPanel: config.globalShortcutPanel,
     managedFile: MANAGED_FILE,
     addedSource,
     error: ''
   };
 }
 
-function applyOnX11(config, onTrigger) {
+function applyOnX11(config, handlers) {
   globalShortcut.unregisterAll();
   try {
-    const registered = globalShortcut.register(config.globalShortcut, onTrigger);
+    const quickOk = globalShortcut.register(config.globalShortcut, handlers.onQuick);
+    const clipOk = globalShortcut.register(config.globalShortcutClip, handlers.onClip);
+    const panelOk = globalShortcut.register(config.globalShortcutPanel, handlers.onPanel);
+    const registered = quickOk && clipOk && panelOk;
+    const failed = [];
+    if (!quickOk) failed.push(config.globalShortcut);
+    if (!clipOk) failed.push(config.globalShortcutClip);
+    if (!panelOk) failed.push(config.globalShortcutPanel);
     return {
       registered,
       environment: 'x11',
       shortcut: config.globalShortcut,
-      error: registered ? '' : 'Este ambiente recusou o atalho — provavelmente já está em uso por outro app.'
+      shortcutClip: config.globalShortcutClip,
+      shortcutPanel: config.globalShortcutPanel,
+      error: registered
+        ? ''
+        : `Este ambiente recusou o(s) atalho(s) ${failed.join(', ')} — provavelmente já em uso por outro app.`
     };
   } catch (err) {
-    return { registered: false, environment: 'x11', shortcut: config.globalShortcut, error: err.message };
+    return {
+      registered: false,
+      environment: 'x11',
+      shortcut: config.globalShortcut,
+      shortcutClip: config.globalShortcutClip,
+      shortcutPanel: config.globalShortcutPanel,
+      error: err.message
+    };
   }
 }
 
 /**
- * Aplica o atalho no ambiente atual. Chamado no boot do serviço e sempre que o
- * usuário salva as configurações.
+ * Aplica os atalhos no ambiente atual. Chamado no boot do serviço e sempre que
+ * o usuário salva as configurações.
+ *
+ * @param {object} config
+ * @param {{ onQuick: () => void, onClip: () => void, onPanel: () => void }} handlers
  */
-async function sync(config, onTrigger) {
+async function sync(config, handlers) {
   if (hypr.isHyprland()) {
     try {
       return await applyOnHyprland(config);
@@ -207,6 +287,8 @@ async function sync(config, onTrigger) {
         registered: false,
         environment: 'hyprland',
         shortcut: config.globalShortcut,
+        shortcutClip: config.globalShortcutClip,
+        shortcutPanel: config.globalShortcutPanel,
         error: err.message
       };
     }
@@ -217,13 +299,15 @@ async function sync(config, onTrigger) {
       registered: false,
       environment: 'wayland',
       shortcut: config.globalShortcut,
+      shortcutClip: config.globalShortcutClip,
+      shortcutPanel: config.globalShortcutPanel,
       error:
-        'Neste compositor Wayland o app não consegue registrar o atalho sozinho. ' +
-        `Crie um atalho no seu ambiente apontando para: ${TRIGGER_SCRIPT}`
+        'Neste compositor Wayland o app não consegue registrar os atalhos sozinho. ' +
+        `Crie atalhos apontando para: ${TRIGGER_SCRIPT} quick  e  ${TRIGGER_SCRIPT} clip  e  ${TRIGGER_SCRIPT} panel`
     };
   }
 
-  return applyOnX11(config, onTrigger);
+  return applyOnX11(config, handlers);
 }
 
 /**
