@@ -215,6 +215,49 @@ html, body {
   background: #475569;
 }
 
+.btn-sm {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+/* ---------- Janela rápida de texto (clipboard) ---------- */
+
+.quick-title-input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg);
+  border: 2px solid var(--surface-2);
+  border-radius: var(--radius);
+  outline: none;
+  font-family: inherit;
+}
+
+.quick-title-input:focus {
+  border-color: var(--primary);
+}
+
+.quick-content {
+  flex: 1;
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px;
+  font-size: 15px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text);
+  background: var(--bg);
+  border: 2px solid var(--surface-2);
+  border-radius: var(--radius);
+  resize: none;
+  outline: none;
+}
+
+.quick-content:focus {
+  border-color: var(--primary);
+}
+
 /* ---------- Main app ---------- */
 
 .main-layout {
@@ -225,20 +268,47 @@ html, body {
 
 .topbar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 24px;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
   background: var(--surface);
   border-bottom: 1px solid var(--surface-2);
 }
 
+.topbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .logo {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
 }
 
 .logo span {
   color: var(--primary);
+}
+
+.panel-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.panel-close:hover {
+  background: var(--surface-2);
+  color: var(--text);
 }
 
 .nav {
@@ -247,8 +317,9 @@ html, body {
 }
 
 .nav button {
-  padding: 8px 16px;
-  font-size: 14px;
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-muted);
   background: transparent;
@@ -265,7 +336,7 @@ html, body {
 .content {
   flex: 1;
   overflow-y: auto;
-  padding: 24px;
+  padding: 16px;
 }
 
 .section-title {
@@ -391,17 +462,13 @@ html, body {
 
 .activity-card {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 14px;
   background: var(--surface);
   border-radius: var(--radius);
   border-left: 4px solid var(--primary);
-  transition: transform 0.1s;
-}
-
-.activity-card:hover {
-  transform: translateX(4px);
 }
 
 .activity-card.overdue {
@@ -479,6 +546,8 @@ html, body {
 
 .activity-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
 }
 
@@ -549,94 +618,233 @@ html, body {
   transform: translateY(0);
 }
 
-/* Reports */
+/* Aba Clipboard */
 
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
-}
-
-.stat-card {
-  padding: 20px;
+.add-card {
   background: var(--surface);
+  padding: 14px;
   border-radius: var(--radius);
+  margin-bottom: 20px;
 }
 
-.stat-value {
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--primary);
+.add-card input[type="text"],
+.add-card textarea {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+  border: 2px solid var(--surface-2);
+  border-radius: var(--radius);
+  outline: none;
+  font-family: inherit;
 }
 
-.stat-value.danger {
-  color: var(--danger);
+.add-card textarea {
+  margin-top: 10px;
+  min-height: 80px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-.stat-label {
-  font-size: 13px;
-  color: var(--text-muted);
-  margin-top: 4px;
+.add-card input:focus,
+.add-card textarea:focus {
+  border-color: var(--primary);
 }
 
-.reports-section {
-  margin-top: 24px;
-}
-
-.reports-section h3 {
-  margin: 0 0 12px;
-  font-size: 16px;
-}
-
-.tag-ranking {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.tag-row {
+.add-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  background: var(--surface);
-  border-radius: 8px;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
 }
 
-.tag-name {
-  width: 120px;
-  font-weight: 600;
+/* Ordenação (Recentes / Copiados) */
+
+.panel-sort {
+  display: flex;
+  gap: 6px;
 }
 
-.tag-bar-bg {
+.panel-sort button {
   flex: 1;
-  height: 8px;
-  background: var(--surface-2);
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.tag-bar {
-  height: 100%;
-  background: var(--primary);
-  border-radius: 4px;
-}
-
-.tag-count {
-  width: 40px;
-  text-align: right;
-  font-size: 13px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
   color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--surface-2);
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.panel-sort button.active {
+  color: #fff;
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.entries-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.entry-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  border-left: 4px solid var(--primary);
+}
+
+.entry-card.editing {
+  border-left-color: var(--warning);
+}
+
+/* O .edit-input é compartilhado com o card de atividade, onde ele é um item
+   flex em linha (flex: 1). Aqui o card empilha em coluna, então o flex faria
+   o campo esticar na vertical. */
+.entry-card .edit-input {
+  flex: none;
+  width: 100%;
+  font-family: inherit;
+}
+
+.entry-info {
+  min-width: 0;
+}
+
+.entry-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  word-break: break-word;
+}
+
+/* O conteúdo é monoespaçado e truncado em 4 linhas: o card é um índice, não
+   um leitor — o texto inteiro vai pro clipboard no botão Copiar. */
+.entry-content {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.entry-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.entry-meta {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.entry-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-copy {
+  flex: 1;
+}
+
+.edit-content {
+  width: 100%;
+  margin-top: 8px;
+  min-height: 100px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  border: 2px solid var(--primary);
+  border-radius: 8px;
+  outline: none;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 /* Settings */
+
+.settings-tabs {
+  display: flex;
+  gap: 6px;
+  max-width: 560px;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--surface-2);
+}
+
+.settings-tabs button {
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.settings-tabs button:hover {
+  color: var(--text);
+}
+
+.settings-tabs button.active {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.settings-footer {
+  max-width: 560px;
+  margin-top: 20px;
+}
 
 .settings-form {
   max-width: 560px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.volume-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.volume-row input[type="range"] {
+  flex: 1;
+  accent-color: var(--primary);
+}
+
+.volume-value {
+  min-width: 44px;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
 }
 
 .form-group {

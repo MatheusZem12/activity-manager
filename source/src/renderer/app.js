@@ -1,12 +1,13 @@
 const API = window.activityAPI;
 const Parser = window.ActivityParser;
+const EntryParser = window.EntryParser;
 
 const params = new URLSearchParams(window.location.search);
-const mode = params.get('mode') || 'main';
+const mode = params.get('mode') || 'panel';
 
 const appEl = document.getElementById('app');
 
-let state = { activities: [], config: {} };
+let state = { activities: [], entries: [], config: {} };
 
 // Estado da interface — sobrevive às re-renderizações disparadas por eventos
 // do main, para nunca apagar o que está sendo digitado.
@@ -18,6 +19,25 @@ let editingId = null;
 let editDraft = '';
 let dashDraft = '';
 let quickDraft = '';
+
+// Aba de clipboard (dentro do painel)
+let clipSearchQuery = '';
+let clipActiveTag = null;
+let clipSort = 'recent'; // 'recent' | 'copied'
+let editingEntryId = null;
+let editEntryTitleDraft = '';
+let editEntryContentDraft = '';
+let addEntryTitleDraft = '';
+let addEntryContentDraft = '';
+
+// Aba de configurações — sub-abas (geral/atalhos/notificações/volume) e o
+// rascunho das edições, ver renderSettings().
+let settingsTab = 'geral';
+let settingsDraft = null;
+
+// Janela rápida de captura de texto
+let clipTitleDraft = '';
+let clipContentDraft = '';
 
 // ---------- Utilitários ----------
 
@@ -59,6 +79,10 @@ function defaultMinutes() {
   return state.config.defaultReminderMinutes || 15;
 }
 
+function maxTitleLen() {
+  return state.config.maxTitleLength || 120;
+}
+
 function allTags() {
   const counts = {};
   for (const a of state.activities) {
@@ -67,8 +91,35 @@ function allTags() {
   return Object.entries(counts).sort((a, b) => b[1] - a[1]);
 }
 
+/** Tags dos textos do clipboard — contadas separadas das de atividade. */
+function allEntryTags() {
+  const counts = {};
+  for (const e of state.entries) {
+    for (const t of e.tags) counts[t] = (counts[t] || 0) + 1;
+  }
+  return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+}
+
 function findActivity(id) {
   return state.activities.find((a) => a.id === id) || null;
+}
+
+function findEntry(id) {
+  return state.entries.find((e) => e.id === id) || null;
+}
+
+/** Título exibido: o armazenado ou, se vazio, a 1ª linha do conteúdo (60 chars). */
+function displayTitle(entry) {
+  if (entry.title && entry.title.trim()) return entry.title;
+  const firstLine = (entry.content || '').split('\n')[0].trim();
+  if (!firstLine) return '(sem título)';
+  return firstLine.length > 60 ? firstLine.slice(0, 60) + '…' : firstLine;
+}
+
+/** Recompõe o título editável a partir do título limpo + tags. */
+function rawTitleFor(entry) {
+  const tags = entry.tags.map((t) => ` #${t}`).join('');
+  return `${entry.title}${tags}`.trim();
 }
 
 let toastTimer = null;
@@ -187,6 +238,91 @@ function setupSmartInput(input, { previewEl, suggestEl, counterEl, onSubmit, onC
   update();
 }
 
+/**
+ * Versão do setupSmartInput para o **título de um texto do clipboard**: só
+ * extrai #tags (não há !tempo aqui) e não trata o Enter — quem chama decide se
+ * ele salva ou pula para o campo de conteúdo.
+ */
+function setupTitleInput(input, { previewEl, suggestEl, counterEl, onChange }) {
+  function completeTag(ctx, tag) {
+    const caret = input.selectionStart;
+    input.value = input.value.slice(0, ctx.start) + tag + ' ' + input.value.slice(caret);
+    const pos = ctx.start + tag.length + 1;
+    input.focus();
+    input.setSelectionRange(pos, pos);
+    update();
+  }
+
+  function renderSuggestions() {
+    if (!suggestEl) return;
+    const ctx = currentTagPrefix(input.value, input.selectionStart ?? input.value.length);
+    if (!ctx) {
+      suggestEl.innerHTML = '';
+      return;
+    }
+    const matches = allEntryTags()
+      .map(([t]) => t)
+      .filter((t) => t.startsWith(ctx.prefix) && t !== ctx.prefix)
+      .slice(0, 6);
+    if (matches.length === 0) {
+      suggestEl.innerHTML = '';
+      return;
+    }
+    suggestEl.innerHTML = matches
+      .map((t) => `<button type="button" class="suggest-chip" data-tag="${escapeHtml(t)}">#${escapeHtml(t)}</button>`)
+      .join('');
+    suggestEl.querySelectorAll('.suggest-chip').forEach((btn) => {
+      // mousedown: completa antes de o input perder o foco.
+      btn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        const liveCtx = currentTagPrefix(input.value, input.selectionStart ?? input.value.length);
+        if (liveCtx) completeTag(liveCtx, btn.dataset.tag);
+      });
+    });
+  }
+
+  function update() {
+    if (counterEl) {
+      const len = input.value.length;
+      counterEl.textContent = `${len} / ${maxTitleLen()}`;
+      counterEl.classList.toggle('over', len >= maxTitleLen());
+    }
+    if (previewEl) {
+      const value = input.value.trim();
+      if (!value) {
+        previewEl.innerHTML = '';
+      } else {
+        const parsed = EntryParser.parseTitle(value);
+        const parts = [
+          parsed.title
+            ? `<span class="preview-text">${escapeHtml(parsed.title)}</span>`
+            : '<span class="preview-text empty">título vazio (usa a 1ª linha do conteúdo)</span>'
+        ];
+        parsed.tags.forEach((t) => parts.push(`<span class="preview-chip">#${escapeHtml(t)}</span>`));
+        previewEl.innerHTML = parts.join('');
+      }
+    }
+    renderSuggestions();
+    if (onChange) onChange(input.value);
+  }
+
+  input.addEventListener('input', update);
+  input.addEventListener('click', renderSuggestions);
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab' && suggestEl) {
+      const first = suggestEl.querySelector('.suggest-chip');
+      const ctx = currentTagPrefix(input.value, input.selectionStart ?? input.value.length);
+      if (first && ctx) {
+        e.preventDefault();
+        completeTag(ctx, first.dataset.tag);
+      }
+    }
+  });
+
+  update();
+}
+
 // ---------- Modo rápido ----------
 
 function renderQuickMode() {
@@ -264,16 +400,145 @@ function renderQuickMode() {
   input.setSelectionRange(input.value.length, input.value.length);
 }
 
-// ---------- Modo principal ----------
+// ---------- Modo captura de texto (clipboard) ----------
 
-function renderMainMode() {
+function renderClipMode() {
+  appEl.innerHTML = `
+    <div class="quick-container">
+      <div class="quick-header">
+        <div class="quick-title">NOVO TEXTO</div>
+        <button class="quick-close" id="clip-close">&times;</button>
+      </div>
+      <input
+        type="text"
+        id="clip-title"
+        class="quick-title-input"
+        placeholder="Título (opcional) — use #tag para categorizar"
+        maxlength="${maxTitleLen()}"
+      >
+      <div class="input-preview" id="clip-preview"></div>
+      <div class="tag-suggest" id="clip-suggest"></div>
+      <textarea
+        id="clip-content"
+        class="quick-content"
+        placeholder="Conteúdo a salvar (será colado exatamente como digitado)"
+      ></textarea>
+      <div class="quick-meta">
+        <div class="quick-hint">
+          <span class="tag">#tag</span> no título · <span class="tag">Tab</span> completa · <span class="tag">Enter</span> salva · <span class="tag">Shift+Enter</span> quebra linha · <span class="tag">Esc</span> fecha
+        </div>
+        <div class="quick-counter" id="clip-counter"></div>
+      </div>
+      <div class="quick-actions">
+        <button class="btn btn-secondary" id="clip-cancel">Cancelar</button>
+        <button class="btn btn-primary" id="clip-save">Salvar</button>
+      </div>
+    </div>
+  `;
+
+  const titleInput = document.getElementById('clip-title');
+  const contentInput = document.getElementById('clip-content');
+  const saveBtn = document.getElementById('clip-save');
+
+  titleInput.value = clipTitleDraft;
+  contentInput.value = clipContentDraft;
+
+  function hasDraft() {
+    return titleInput.value.trim().length > 0 || contentInput.value.trim().length > 0;
+  }
+
+  function syncDraft() {
+    clipTitleDraft = titleInput.value;
+    clipContentDraft = contentInput.value;
+    saveBtn.disabled = contentInput.value.trim().length === 0;
+    // Enquanto houver rascunho, a janela não se fecha ao perder o foco.
+    API.setClipDraft(hasDraft());
+  }
+
+  function discardAndClose() {
+    clipTitleDraft = '';
+    clipContentDraft = '';
+    API.setClipDraft(false);
+    API.closeClipWindow();
+  }
+
+  async function save() {
+    const content = contentInput.value;
+    if (!content.trim()) {
+      contentInput.focus();
+      return;
+    }
+    try {
+      await API.createEntry(titleInput.value, content);
+      clipTitleDraft = '';
+      clipContentDraft = '';
+      API.setClipDraft(false);
+      await API.closeClipWindow();
+    } catch (err) {
+      console.error(err);
+      toast('Erro ao salvar.');
+    }
+  }
+
+  setupTitleInput(titleInput, {
+    previewEl: document.getElementById('clip-preview'),
+    suggestEl: document.getElementById('clip-suggest'),
+    counterEl: document.getElementById('clip-counter'),
+    onChange: syncDraft
+  });
+
+  titleInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      if (e.ctrlKey) {
+        e.preventDefault();
+        save();
+      } else if (!e.shiftKey) {
+        // Enter no título → foca o conteúdo.
+        e.preventDefault();
+        contentInput.focus();
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      discardAndClose();
+    }
+  });
+
+  contentInput.addEventListener('input', syncDraft);
+  contentInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      // Enter salva; Shift+Enter quebra linha (padrão do textarea).
+      if (e.ctrlKey || !e.shiftKey) {
+        e.preventDefault();
+        save();
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      discardAndClose();
+    }
+  });
+
+  saveBtn.addEventListener('click', save);
+  document.getElementById('clip-cancel').addEventListener('click', discardAndClose);
+  document.getElementById('clip-close').addEventListener('click', discardAndClose);
+
+  titleInput.focus();
+  titleInput.setSelectionRange(titleInput.value.length, titleInput.value.length);
+  syncDraft();
+}
+
+// ---------- Painel de atividades (janela overlay) ----------
+
+function renderPanelMode() {
   appEl.innerHTML = `
     <div class="main-layout">
       <header class="topbar">
-        <div class="logo"><span>Activity</span> Manager</div>
+        <div class="topbar-row">
+          <div class="logo"><span>Activity</span> Manager</div>
+          <button class="panel-close" id="panel-close" title="Fechar">&times;</button>
+        </div>
         <nav class="nav">
           <button data-screen="dashboard" class="${currentScreen === 'dashboard' ? 'active' : ''}">Atividades</button>
-          <button data-screen="reports" class="${currentScreen === 'reports' ? 'active' : ''}">Relatórios</button>
+          <button data-screen="clipboard" class="${currentScreen === 'clipboard' ? 'active' : ''}">Clipboard</button>
           <button data-screen="settings" class="${currentScreen === 'settings' ? 'active' : ''}">Configurações</button>
         </nav>
       </header>
@@ -285,9 +550,14 @@ function renderMainMode() {
     btn.addEventListener('click', () => {
       currentScreen = btn.dataset.screen;
       editingId = null;
-      renderMainMode();
+      editingEntryId = null;
+      settingsTab = 'geral';
+      settingsDraft = null;
+      renderPanelMode();
     });
   });
+
+  document.getElementById('panel-close').addEventListener('click', () => API.closePanelWindow());
 
   renderScreen();
 }
@@ -296,7 +566,7 @@ function renderScreen() {
   const content = document.getElementById('main-content');
   if (!content) return;
   if (currentScreen === 'dashboard') renderDashboard(content);
-  else if (currentScreen === 'reports') renderReports(content);
+  else if (currentScreen === 'clipboard') renderClipboardScreen(content);
   else if (currentScreen === 'settings') renderSettings(content);
 }
 
@@ -323,10 +593,10 @@ function rerenderPreservingFocus() {
   }
 }
 
-function refreshMain() {
-  if (mode !== 'main') return;
+function refreshPanel() {
+  if (mode !== 'panel') return;
   if (!document.getElementById('main-content')) {
-    renderMainMode();
+    renderPanelMode();
     return;
   }
   rerenderPreservingFocus();
@@ -586,115 +856,329 @@ function wireEditInput() {
   });
 }
 
-// ---------- Relatórios ----------
+// ---------- Aba Clipboard ----------
 
-function renderReports(container) {
-  const completed = state.activities.filter((a) => a.completedAt);
-  const pending = state.activities.filter((a) => !a.completedAt);
+function entryMatchesFilters(e) {
+  const q = clipSearchQuery.trim().toLowerCase();
+  if (q) {
+    const hay = `${e.title}\n${e.content}\n${e.tags.join(' ')}`.toLowerCase();
+    if (!hay.includes(q)) return false;
+  }
+  if (clipActiveTag && !e.tags.includes(clipActiveTag)) return false;
+  return true;
+}
 
-  const totalTime = completed.reduce((sum, a) => sum + (a.completedAt - a.createdAt), 0);
-  const avgTime = completed.length > 0 ? totalTime / completed.length : 0;
-
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
-  const todayStart = startOfDay.getTime();
-  const completedToday = completed.filter((a) => a.completedAt >= todayStart).length;
-  const overdueCount = pending.filter((a) => a.dueAt < Date.now()).length;
-
-  const tagCounts = {};
-  state.activities.forEach((a) => {
-    a.tags.forEach((t) => {
-      tagCounts[t] = (tagCounts[t] || 0) + 1;
-    });
-  });
-  const sortedTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]);
-  const maxTag = sortedTags.length > 0 ? sortedTags[0][1] : 1;
-
-  container.innerHTML = `
-    <h2 class="section-title">Visão geral</h2>
-    <div class="stats-grid">
-      <div class="stat-card"><div class="stat-value">${state.activities.length}</div><div class="stat-label">Total de atividades</div></div>
-      <div class="stat-card"><div class="stat-value">${pending.length}</div><div class="stat-label">Pendentes</div></div>
-      <div class="stat-card"><div class="stat-value ${overdueCount > 0 ? 'danger' : ''}">${overdueCount}</div><div class="stat-label">Atrasadas</div></div>
-      <div class="stat-card"><div class="stat-value">${completed.length}</div><div class="stat-label">Concluídas</div></div>
-      <div class="stat-card"><div class="stat-value">${completedToday}</div><div class="stat-label">Concluídas hoje</div></div>
-      <div class="stat-card"><div class="stat-value">${formatDuration(avgTime)}</div><div class="stat-label">Tempo médio de resolução</div></div>
-    </div>
-
-    ${sortedTags.length > 0 ? `
-      <div class="reports-section">
-        <h3>Atividades por categoria</h3>
-        <div class="tag-ranking">
-          ${sortedTags.map(([tag, count]) => `
-            <div class="tag-row">
-              <div class="tag-name">#${escapeHtml(tag)}</div>
-              <div class="tag-bar-bg"><div class="tag-bar" style="width:${(count / maxTag) * 100}%"></div></div>
-              <div class="tag-count">${count}</div>
-            </div>
-          `).join('')}
+function entryCardHtml(e) {
+  if (e.id === editingEntryId) {
+    return `
+      <div class="entry-card editing" data-id="${e.id}">
+        <input id="edit-entry-title" class="edit-input" maxlength="${maxTitleLen()}" value="${escapeHtml(editEntryTitleDraft)}" placeholder="Título (use #tag)">
+        <div class="tag-suggest" id="edit-entry-suggest"></div>
+        <textarea id="edit-entry-content" class="edit-content" placeholder="Conteúdo">${escapeHtml(editEntryContentDraft)}</textarea>
+        <div class="edit-actions">
+          <button class="btn btn-primary btn-sm" data-entry-action="save-edit">Salvar</button>
+          <button class="btn btn-secondary btn-sm" data-entry-action="cancel-edit">Cancelar</button>
         </div>
       </div>
-    ` : `<div class="empty-state">Nenhuma categoria registrada ainda. Use #tag ao criar atividades.</div>`}
+    `;
+  }
+
+  return `
+    <div class="entry-card" data-id="${e.id}">
+      <div class="entry-info">
+        <div class="entry-title">${escapeHtml(displayTitle(e))}</div>
+        <div class="entry-content">${escapeHtml(e.content)}</div>
+        ${e.tags.length ? `
+          <div class="entry-tags">
+            ${e.tags.map((t) => `<button class="tag-pill" data-entry-tag="${escapeHtml(t)}" title="Filtrar por #${escapeHtml(t)}">#${escapeHtml(t)}</button>`).join('')}
+          </div>
+        ` : ''}
+        <div class="entry-meta">Criado ${formatTime(e.createdAt)}${e.copyCount ? ` · Copiado ${e.copyCount}×` : ''}</div>
+      </div>
+      <div class="entry-actions">
+        <button class="btn btn-primary btn-sm btn-copy" data-entry-action="copy">Copiar</button>
+        <button class="icon-btn" data-entry-action="edit" title="Editar">✎</button>
+        <button class="icon-btn delete" data-entry-action="delete" title="Excluir">🗑</button>
+      </div>
+    </div>
   `;
+}
+
+function renderClipboardScreen(container) {
+  let entries = state.entries.filter(entryMatchesFilters);
+  if (clipSort === 'copied') {
+    entries = entries.slice().sort((a, b) => (b.lastCopiedAt || 0) - (a.lastCopiedAt || 0) || b.createdAt - a.createdAt);
+  } else {
+    entries = entries.slice().sort((a, b) => b.createdAt - a.createdAt);
+  }
+  const tags = allEntryTags();
+  const filtering = clipSearchQuery.trim() || clipActiveTag;
+
+  container.innerHTML = `
+    <div class="add-card">
+      <input type="text" id="add-entry-title" placeholder="Título (opcional, use #tag)..." maxlength="${maxTitleLen()}" value="${escapeHtml(addEntryTitleDraft)}">
+      <div class="input-preview" id="add-entry-preview"></div>
+      <div class="tag-suggest" id="add-entry-suggest"></div>
+      <textarea id="add-entry-content" placeholder="Conteúdo a salvar...">${escapeHtml(addEntryContentDraft)}</textarea>
+      <div class="add-row">
+        <div class="quick-add-help"><strong>#tag</strong> no título categoriza · <strong>Ctrl+Enter</strong> adiciona · o conteúdo é salvo exatamente como digitado</div>
+        <button class="btn btn-primary" id="add-entry-btn">Adicionar</button>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <input type="search" id="clip-search" class="search-input" placeholder="Buscar textos... (/)" value="${escapeHtml(clipSearchQuery)}">
+      <div class="panel-sort" id="clip-sort">
+        <button data-sort="recent" class="${clipSort === 'recent' ? 'active' : ''}">Recentes</button>
+        <button data-sort="copied" class="${clipSort === 'copied' ? 'active' : ''}">Copiados</button>
+      </div>
+      ${tags.length > 0 ? `
+        <div class="tag-filter">
+          ${tags.map(([t, count]) => `
+            <button class="filter-chip ${clipActiveTag === t ? 'active' : ''}" data-entry-tag="${escapeHtml(t)}">#${escapeHtml(t)} <span class="chip-count">${count}</span></button>
+          `).join('')}
+          ${clipActiveTag ? `<button class="filter-chip clear" id="clip-clear-filter">limpar ✕</button>` : ''}
+        </div>
+      ` : ''}
+    </div>
+
+    <h2 class="section-title">Textos (${entries.length})</h2>
+    <div class="entries-list" id="entries-list">
+      ${entries.length > 0
+        ? entries.map((e) => entryCardHtml(e)).join('')
+        : `<div class="empty-state">${filtering ? 'Nada encontrado com esse filtro.' : 'Nenhum texto salvo. Use o formulário acima ou o atalho global.'}</div>`}
+    </div>
+  `;
+
+  const titleInput = document.getElementById('add-entry-title');
+  const contentInput = document.getElementById('add-entry-content');
+
+  async function addEntry() {
+    const content = contentInput.value;
+    if (!content.trim()) {
+      contentInput.focus();
+      return;
+    }
+    const title = titleInput.value;
+    addEntryTitleDraft = '';
+    addEntryContentDraft = '';
+    titleInput.value = '';
+    contentInput.value = '';
+    await API.createEntry(title, content);
+    toast('Texto salvo');
+  }
+
+  setupTitleInput(titleInput, {
+    previewEl: document.getElementById('add-entry-preview'),
+    suggestEl: document.getElementById('add-entry-suggest'),
+    onChange: (value) => { addEntryTitleDraft = value; }
+  });
+
+  titleInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      if (e.ctrlKey) { e.preventDefault(); addEntry(); }
+      else if (!e.shiftKey) { e.preventDefault(); contentInput.focus(); }
+    }
+  });
+
+  contentInput.addEventListener('input', () => { addEntryContentDraft = contentInput.value; });
+  contentInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.ctrlKey) {
+      e.preventDefault();
+      addEntry();
+    }
+  });
+
+  document.getElementById('add-entry-btn').addEventListener('click', addEntry);
+
+  const searchInput = document.getElementById('clip-search');
+  searchInput.addEventListener('input', () => {
+    clipSearchQuery = searchInput.value;
+    rerenderPreservingFocus();
+  });
+
+  document.getElementById('clip-sort').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-sort]');
+    if (!btn) return;
+    clipSort = btn.dataset.sort;
+    renderScreen();
+  });
+
+  const clearFilter = document.getElementById('clip-clear-filter');
+  if (clearFilter) {
+    clearFilter.addEventListener('click', () => {
+      clipActiveTag = null;
+      renderScreen();
+    });
+  }
+
+  wireEntryActions(container);
+  wireEntryEditInputs();
+}
+
+function wireEntryActions(container) {
+  const list = container.querySelector('#entries-list');
+  if (list) {
+    list.addEventListener('click', async (e) => {
+      const actionBtn = e.target.closest('[data-entry-action]');
+      if (actionBtn) {
+        const card = actionBtn.closest('.entry-card');
+        const id = card && card.dataset.id;
+        if (!id) return;
+        const action = actionBtn.dataset.entryAction;
+
+        if (action === 'copy') {
+          await API.copyEntry(id);
+          toast('Copiado!');
+        } else if (action === 'edit') {
+          const entry = findEntry(id);
+          if (!entry) return;
+          editingEntryId = id;
+          editEntryTitleDraft = rawTitleFor(entry);
+          editEntryContentDraft = entry.content;
+          renderScreen();
+          const t = document.getElementById('edit-entry-title');
+          if (t) {
+            t.focus();
+            t.setSelectionRange(t.value.length, t.value.length);
+          }
+        } else if (action === 'delete') {
+          if (confirm('Tem certeza que deseja excluir este texto?')) {
+            await API.deleteEntry(id);
+          }
+        } else if (action === 'save-edit') {
+          await saveEntryEdit(id);
+        } else if (action === 'cancel-edit') {
+          editingEntryId = null;
+          renderScreen();
+        }
+        return;
+      }
+
+      const tagPill = e.target.closest('[data-entry-tag]');
+      if (tagPill) {
+        const t = tagPill.dataset.entryTag;
+        clipActiveTag = clipActiveTag === t ? null : t;
+        renderScreen();
+      }
+    });
+  }
+
+  const toolbar = container.querySelector('.tag-filter');
+  if (toolbar) {
+    toolbar.addEventListener('click', (e) => {
+      const chip = e.target.closest('[data-entry-tag]');
+      if (!chip) return;
+      const t = chip.dataset.entryTag;
+      clipActiveTag = clipActiveTag === t ? null : t;
+      renderScreen();
+    });
+  }
+}
+
+async function saveEntryEdit(id) {
+  const titleInput = document.getElementById('edit-entry-title');
+  const contentInput = document.getElementById('edit-entry-content');
+  const content = contentInput ? contentInput.value : editEntryContentDraft;
+  if (!content.trim()) {
+    if (contentInput) contentInput.focus();
+    return;
+  }
+  const title = titleInput ? titleInput.value : editEntryTitleDraft;
+  editingEntryId = null;
+  await API.updateEntry(id, title, content);
+  toast('Texto atualizado');
+}
+
+function wireEntryEditInputs() {
+  const titleInput = document.getElementById('edit-entry-title');
+  const contentInput = document.getElementById('edit-entry-content');
+  if (!titleInput || !contentInput) return;
+
+  const id = titleInput.closest('.entry-card').dataset.id;
+
+  setupTitleInput(titleInput, {
+    suggestEl: document.getElementById('edit-entry-suggest'),
+    onChange: (value) => { editEntryTitleDraft = value; }
+  });
+
+  titleInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      if (e.ctrlKey) { e.preventDefault(); saveEntryEdit(id); }
+      else if (!e.shiftKey) { e.preventDefault(); contentInput.focus(); }
+    } else if (e.key === 'Escape') {
+      editingEntryId = null;
+      renderScreen();
+    }
+  });
+
+  contentInput.addEventListener('input', () => { editEntryContentDraft = contentInput.value; });
+  contentInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.ctrlKey) {
+      e.preventDefault();
+      saveEntryEdit(id);
+    } else if (e.key === 'Escape') {
+      editingEntryId = null;
+      renderScreen();
+    }
+  });
 }
 
 // ---------- Configurações ----------
 
+const SETTINGS_TABS = [
+  { key: 'geral', label: 'Geral' },
+  { key: 'atalhos', label: 'Atalhos' },
+  { key: 'notificacoes', label: 'Notificações' },
+  { key: 'volume', label: 'Volume' }
+];
+
+/**
+ * As edições ficam num rascunho separado de `state.config` — assim trocar de
+ * aba (o que re-renderiza só a aba ativa) não perde o que foi digitado nas
+ * outras. `null` sinaliza "recém-entrou na tela", e é reconstruído a partir do
+ * config salvo; fica `null` de novo depois de salvar com sucesso.
+ */
 function renderSettings(container) {
+  if (!settingsDraft) settingsDraft = { ...state.config };
+
   container.innerHTML = `
     <h2 class="section-title">Configurações</h2>
-    <div class="settings-form">
-      <div class="form-group">
-        <label>Tempo padrão do alerta (minutos)</label>
-        <input type="number" id="cfg-default-minutes" min="1" value="${state.config.defaultReminderMinutes}">
-        <div class="form-hint">Usado quando você não digitar !N na atividade.</div>
-      </div>
-
-      <div class="form-group">
-        <label>Limite máximo de caracteres</label>
-        <input type="number" id="cfg-max-length" min="10" value="${state.config.maxTextLength}">
-        <div class="form-hint">Tamanho máximo do texto de uma atividade.</div>
-      </div>
-
-      <div class="form-group">
-        <label>Atalho global</label>
-        <input type="text" id="cfg-shortcut" class="shortcut-input" value="${escapeHtml(state.config.globalShortcut)}" placeholder="Clique aqui e pressione as teclas" readonly>
-        <div class="form-hint">
-          Clique no campo e pressione a combinação desejada (ex: Ctrl+Alt+A). Ao salvar,
-          o serviço registra o atalho no seu ambiente sozinho — você não precisa editar
-          nenhum arquivo de configuração.
-        </div>
-        <div id="shortcut-conflict" class="shortcut-status"></div>
-        <div id="shortcut-status" class="shortcut-status"></div>
-        <button class="btn btn-secondary btn-inline" id="btn-test-quick">Testar janela rápida</button>
-      </div>
-
-      <div class="form-group checkbox-row">
-        <input type="checkbox" id="cfg-autostart" ${state.config.startOnLogin ? 'checked' : ''}>
-        <label for="cfg-autostart">Iniciar junto com o sistema</label>
-      </div>
-
-      <div class="settings-actions">
-        <button class="btn btn-secondary" id="btn-export">Exportar backup</button>
-        <button class="btn btn-secondary" id="btn-import">Importar backup</button>
-        <button class="btn btn-primary" id="btn-save-cfg">Salvar configurações</button>
-      </div>
+    <div class="settings-tabs">
+      ${SETTINGS_TABS.map((t) => `<button data-tab="${t.key}" class="${settingsTab === t.key ? 'active' : ''}">${t.label}</button>`).join('')}
+    </div>
+    <div class="settings-form" id="settings-tab-body"></div>
+    <div class="settings-actions settings-footer">
+      <button class="btn btn-primary" id="btn-save-cfg">Salvar configurações</button>
     </div>
   `;
 
-  setupShortcutCapture(document.getElementById('cfg-shortcut'));
-  renderShortcutStatus();
-  renderShortcutConflict(state.config.globalShortcut);
+  document.querySelectorAll('.settings-tabs button').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      settingsTab = btn.dataset.tab;
+      renderScreen();
+    });
+  });
 
-  document.getElementById('btn-test-quick').addEventListener('click', () => API.openQuickWindow());
+  const body = document.getElementById('settings-tab-body');
+  if (settingsTab === 'geral') renderGeneralTab(body);
+  else if (settingsTab === 'atalhos') renderShortcutsTab(body);
+  else if (settingsTab === 'notificacoes') renderNotificationsTab(body);
+  else if (settingsTab === 'volume') renderVolumeTab(body);
 
   document.getElementById('btn-save-cfg').addEventListener('click', async () => {
     const saveBtn = document.getElementById('btn-save-cfg');
     const patch = {
-      defaultReminderMinutes: parseInt(document.getElementById('cfg-default-minutes').value, 10) || 15,
-      maxTextLength: parseInt(document.getElementById('cfg-max-length').value, 10) || 120,
-      globalShortcut: document.getElementById('cfg-shortcut').value.trim() || 'Ctrl+Alt+A',
-      startOnLogin: document.getElementById('cfg-autostart').checked
+      defaultReminderMinutes: parseInt(settingsDraft.defaultReminderMinutes, 10) || 15,
+      maxTextLength: parseInt(settingsDraft.maxTextLength, 10) || 120,
+      maxTitleLength: parseInt(settingsDraft.maxTitleLength, 10) || 120,
+      globalShortcut: (settingsDraft.globalShortcut || '').trim() || 'Ctrl+Alt+A',
+      globalShortcutClip: (settingsDraft.globalShortcutClip || '').trim() || 'Ctrl+Alt+C',
+      globalShortcutPanel: (settingsDraft.globalShortcutPanel || '').trim() || 'Ctrl+Alt+P',
+      panelSide: settingsDraft.panelSide,
+      startOnLogin: !!settingsDraft.startOnLogin,
+      soundEnabled: !!settingsDraft.soundEnabled,
+      soundVolume: parseInt(settingsDraft.soundVolume, 10)
     };
 
     // Registrar o atalho recarrega o compositor: pode levar um instante.
@@ -702,12 +1186,74 @@ function renderSettings(container) {
     saveBtn.textContent = 'Salvando...';
     try {
       await API.saveConfig(patch);
+      settingsDraft = null;
       await renderShortcutStatus();
       toast('Configurações salvas');
     } finally {
       saveBtn.disabled = false;
       saveBtn.textContent = 'Salvar configurações';
     }
+  });
+}
+
+function renderGeneralTab(body) {
+  body.innerHTML = `
+    <div class="form-group">
+      <label>Tempo padrão do alerta (minutos)</label>
+      <input type="number" id="cfg-default-minutes" min="1" value="${settingsDraft.defaultReminderMinutes}">
+      <div class="form-hint">Usado quando você não digitar !N na atividade.</div>
+    </div>
+
+    <div class="form-group">
+      <label>Limite máximo de caracteres</label>
+      <input type="number" id="cfg-max-length" min="10" value="${settingsDraft.maxTextLength}">
+      <div class="form-hint">Tamanho máximo do texto de uma atividade.</div>
+    </div>
+
+    <div class="form-group">
+      <label>Limite de caracteres do título (clipboard)</label>
+      <input type="number" id="cfg-max-title" min="10" value="${settingsDraft.maxTitleLength}">
+      <div class="form-hint">O conteúdo de um texto não tem limite — só o título.</div>
+    </div>
+
+    <div class="form-group">
+      <label>Lado do painel</label>
+      <select id="cfg-panel-side">
+        <option value="right" ${settingsDraft.panelSide !== 'left' ? 'selected' : ''}>Direita</option>
+        <option value="left" ${settingsDraft.panelSide === 'left' ? 'selected' : ''}>Esquerda</option>
+      </select>
+      <div class="form-hint">Em qual borda da tela este painel encosta.</div>
+    </div>
+
+    <div class="form-group checkbox-row">
+      <input type="checkbox" id="cfg-autostart" ${settingsDraft.startOnLogin ? 'checked' : ''}>
+      <label for="cfg-autostart">Iniciar junto com o sistema</label>
+    </div>
+
+    <div class="form-group">
+      <label>Backup</label>
+      <div class="settings-actions">
+        <button class="btn btn-secondary" id="btn-export">Exportar backup</button>
+        <button class="btn btn-secondary" id="btn-import">Importar backup</button>
+      </div>
+      <div class="form-hint">Um único JSON com atividades e textos do clipboard.</div>
+    </div>
+  `;
+
+  document.getElementById('cfg-default-minutes').addEventListener('input', (e) => {
+    settingsDraft.defaultReminderMinutes = e.target.value;
+  });
+  document.getElementById('cfg-max-length').addEventListener('input', (e) => {
+    settingsDraft.maxTextLength = e.target.value;
+  });
+  document.getElementById('cfg-max-title').addEventListener('input', (e) => {
+    settingsDraft.maxTitleLength = e.target.value;
+  });
+  document.getElementById('cfg-panel-side').addEventListener('change', (e) => {
+    settingsDraft.panelSide = e.target.value;
+  });
+  document.getElementById('cfg-autostart').addEventListener('change', (e) => {
+    settingsDraft.startOnLogin = e.target.checked;
   });
 
   document.getElementById('btn-export').addEventListener('click', async () => {
@@ -724,6 +1270,99 @@ function renderSettings(container) {
       console.error(err);
     }
   });
+}
+
+function renderShortcutsTab(body) {
+  body.innerHTML = `
+    <div class="form-group">
+      <label>Atalho — Nova atividade</label>
+      <input type="text" id="cfg-shortcut" class="shortcut-input" value="${escapeHtml(settingsDraft.globalShortcut || '')}" placeholder="Clique aqui e pressione as teclas" readonly>
+      <div id="shortcut-conflict" class="shortcut-status"></div>
+    </div>
+
+    <div class="form-group">
+      <label>Atalho — Novo texto (clipboard)</label>
+      <input type="text" id="cfg-shortcut-clip" class="shortcut-input" value="${escapeHtml(settingsDraft.globalShortcutClip || '')}" placeholder="Clique aqui e pressione as teclas" readonly>
+      <div id="shortcut-clip-conflict" class="shortcut-status"></div>
+    </div>
+
+    <div class="form-group">
+      <label>Atalho — Abrir painel lateral</label>
+      <input type="text" id="cfg-shortcut-panel" class="shortcut-input" value="${escapeHtml(settingsDraft.globalShortcutPanel || '')}" placeholder="Clique aqui e pressione as teclas" readonly>
+      <div id="shortcut-panel-conflict" class="shortcut-status"></div>
+      <div class="form-hint">
+        Clique no campo e pressione a combinação desejada. Ao salvar, o serviço registra
+        os três atalhos no seu ambiente sozinho — você não precisa editar nenhum arquivo
+        de configuração.
+      </div>
+      <div id="shortcut-status" class="shortcut-status"></div>
+      <div class="settings-actions">
+        <button class="btn btn-secondary btn-inline" id="btn-test-quick">Testar nova atividade</button>
+        <button class="btn btn-secondary btn-inline" id="btn-test-clip">Testar novo texto</button>
+        <button class="btn btn-secondary btn-inline" id="btn-test-panel">Testar painel lateral</button>
+      </div>
+    </div>
+  `;
+
+  setupShortcutCapture(document.getElementById('cfg-shortcut'), 'globalShortcut', 'shortcut-conflict');
+  setupShortcutCapture(document.getElementById('cfg-shortcut-clip'), 'globalShortcutClip', 'shortcut-clip-conflict');
+  setupShortcutCapture(document.getElementById('cfg-shortcut-panel'), 'globalShortcutPanel', 'shortcut-panel-conflict');
+  renderShortcutStatus();
+  renderShortcutConflict(settingsDraft.globalShortcut, 'shortcut-conflict');
+  renderShortcutConflict(settingsDraft.globalShortcutClip, 'shortcut-clip-conflict');
+  renderShortcutConflict(settingsDraft.globalShortcutPanel, 'shortcut-panel-conflict');
+
+  document.getElementById('btn-test-quick').addEventListener('click', () => API.openQuickWindow());
+  document.getElementById('btn-test-clip').addEventListener('click', () => API.openClipWindow());
+  document.getElementById('btn-test-panel').addEventListener('click', () => API.showPanelWindow());
+}
+
+function renderNotificationsTab(body) {
+  body.innerHTML = `
+    <div class="form-group">
+      <div class="checkbox-row">
+        <input type="checkbox" id="cfg-sound" ${settingsDraft.soundEnabled ? 'checked' : ''}>
+        <label for="cfg-sound">Tocar som no alerta</label>
+      </div>
+      <div class="form-hint">Um chime curto toca junto com a notificação da atividade.</div>
+    </div>
+
+    <div class="form-group">
+      <label>Repetição do alerta</label>
+      <div class="form-hint">
+        Enquanto uma atividade não for concluída, o alerta (notificação + som) repete
+        sozinho no mesmo intervalo definido nela (!N) — não é preciso configurar nada aqui.
+      </div>
+    </div>
+  `;
+
+  document.getElementById('cfg-sound').addEventListener('change', (e) => {
+    settingsDraft.soundEnabled = e.target.checked;
+  });
+}
+
+function renderVolumeTab(body) {
+  const volume = Number.isFinite(Number(settingsDraft.soundVolume)) ? Number(settingsDraft.soundVolume) : 60;
+  body.innerHTML = `
+    <div class="form-group">
+      <label>Volume do chime</label>
+      <div class="volume-row">
+        <input type="range" id="cfg-sound-volume" min="0" max="100" step="5" value="${volume}">
+        <span class="volume-value" id="cfg-sound-volume-value">${volume}%</span>
+      </div>
+      <div class="form-hint">Volume próprio do alerta — independente do volume geral do sistema.</div>
+      <button class="btn btn-secondary btn-inline" id="btn-test-sound">Testar som</button>
+    </div>
+  `;
+
+  const range = document.getElementById('cfg-sound-volume');
+  const valueLabel = document.getElementById('cfg-sound-volume-value');
+  range.addEventListener('input', () => {
+    settingsDraft.soundVolume = Number(range.value);
+    valueLabel.textContent = `${range.value}%`;
+  });
+
+  document.getElementById('btn-test-sound').addEventListener('click', () => API.testSound(Number(range.value)));
 }
 
 const KEY_ALIASES = {
@@ -761,10 +1400,11 @@ async function renderShortcutStatus() {
   try {
     const status = await API.getShortcutStatus();
     if (status.registered) {
+      const combos = `${status.shortcut} / ${status.shortcutClip} / ${status.shortcutPanel}`;
       el.textContent =
         status.environment === 'hyprland'
-          ? `Atalho ativo — registrado no Hyprland pelo serviço (${status.shortcut}).`
-          : `Atalho global ativo (${status.shortcut}).`;
+          ? `Atalhos ativos — registrados no Hyprland pelo serviço (${combos}).`
+          : `Atalhos globais ativos (${combos}).`;
       el.className = 'shortcut-status ok';
     } else if (status.error) {
       el.textContent = status.error;
@@ -782,8 +1422,8 @@ async function renderShortcutStatus() {
  * Avisa se a combinação escolhida já pertence a outro atalho do compositor —
  * salvar sobrescreve o bind antigo.
  */
-async function renderShortcutConflict(accelerator) {
-  const el = document.getElementById('shortcut-conflict');
+async function renderShortcutConflict(accelerator, elId) {
+  const el = document.getElementById(elId);
   if (!el) return;
   try {
     const conflict = await API.checkShortcutConflict(accelerator);
@@ -799,7 +1439,7 @@ async function renderShortcutConflict(accelerator) {
   }
 }
 
-function setupShortcutCapture(input) {
+function setupShortcutCapture(input, configKey, conflictElId) {
   let recording = false;
 
   function startRecording() {
@@ -828,50 +1468,62 @@ function setupShortcutCapture(input) {
     const shortcut = formatShortcut(e);
     if (shortcut) {
       stopRecording(shortcut);
+      settingsDraft[configKey] = shortcut;
       input.blur();
-      renderShortcutConflict(shortcut);
+      renderShortcutConflict(shortcut, conflictElId);
     }
   });
 
   input.addEventListener('blur', () => {
     if (recording) {
-      stopRecording(state.config.globalShortcut || '');
+      stopRecording(settingsDraft[configKey] || '');
     }
   });
 }
 
-// ---------- Atalhos de teclado da janela principal ----------
+// ---------- Atalhos de teclado do painel ----------
 
-function setupMainKeyboard() {
+function setupPanelKeyboard() {
   document.addEventListener('keydown', (e) => {
     const tag = document.activeElement && document.activeElement.tagName;
     const typing = tag === 'INPUT' || tag === 'TEXTAREA';
 
+    // "/" foca a busca da aba atual — atividades ou clipboard.
     if ((e.key === '/' && !typing) || (e.ctrlKey && e.key.toLowerCase() === 'f')) {
       e.preventDefault();
-      if (currentScreen !== 'dashboard') {
+      if (currentScreen !== 'dashboard' && currentScreen !== 'clipboard') {
         currentScreen = 'dashboard';
-        renderMainMode();
+        renderPanelMode();
       }
-      const search = document.getElementById('search-input');
+      const search = document.getElementById(currentScreen === 'clipboard' ? 'clip-search' : 'search-input');
       if (search) search.focus();
       return;
     }
 
     if (e.key.toLowerCase() === 'n' && !typing && !e.ctrlKey && !e.altKey && !e.metaKey) {
       e.preventDefault();
+      if (currentScreen === 'clipboard') {
+        const input = document.getElementById('add-entry-content');
+        if (input) input.focus();
+        return;
+      }
       if (currentScreen !== 'dashboard') {
         currentScreen = 'dashboard';
-        renderMainMode();
+        renderPanelMode();
       }
       const input = document.getElementById('dash-input');
       if (input) input.focus();
       return;
     }
 
-    if (e.key === 'Escape' && document.activeElement && document.activeElement.id === 'search-input') {
-      searchQuery = '';
-      rerenderPreservingFocus();
+    if (e.key === 'Escape' && document.activeElement) {
+      if (document.activeElement.id === 'search-input') {
+        searchQuery = '';
+        rerenderPreservingFocus();
+      } else if (document.activeElement.id === 'clip-search') {
+        clipSearchQuery = '';
+        rerenderPreservingFocus();
+      }
     }
   });
 }
@@ -883,9 +1535,11 @@ async function init() {
 
   if (mode === 'quick') {
     renderQuickMode();
+  } else if (mode === 'clip') {
+    renderClipMode();
   } else {
-    renderMainMode();
-    setupMainKeyboard();
+    renderPanelMode();
+    setupPanelKeyboard();
 
     // Mantém os tempos relativos ("alerta em X min") atualizados.
     setInterval(() => {
@@ -896,38 +1550,44 @@ async function init() {
   // Eventos do main.
   API.on('state:reload', (newState) => {
     state = newState;
-    refreshMain();
+    refreshPanel();
+  });
+
+  API.on('entries:changed', (entries) => {
+    state.entries = entries;
+    refreshPanel();
   });
 
   API.on('activity:created', (activity) => {
     state.activities = [activity, ...state.activities];
-    refreshMain();
+    refreshPanel();
   });
 
   API.on('activity:updated', (activity) => {
     const idx = state.activities.findIndex((a) => a.id === activity.id);
     if (idx !== -1) state.activities[idx] = activity;
-    refreshMain();
+    refreshPanel();
   });
 
   API.on('activity:deleted', ({ id }) => {
     state.activities = state.activities.filter((a) => a.id !== id);
-    refreshMain();
+    refreshPanel();
   });
 
   API.on('config:updated', (config) => {
     state.config = config;
     if (mode === 'quick') renderQuickMode();
-    else refreshMain();
+    else if (mode === 'clip') renderClipMode();
+    else refreshPanel();
   });
 
   API.on('shortcut:status', () => {
-    if (mode === 'main' && currentScreen === 'settings') renderShortcutStatus();
+    if (mode === 'panel' && currentScreen === 'settings') renderShortcutStatus();
   });
 
   API.on('activity:focus', ({ id }) => {
     currentScreen = 'dashboard';
-    renderMainMode();
+    renderPanelMode();
     setTimeout(() => {
       const el = document.querySelector(`.activity-card[data-id="${id}"]`);
       if (el) {
