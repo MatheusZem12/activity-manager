@@ -1,0 +1,85 @@
+# O backend e o túnel.
+services:
+  activity-backend:
+    image: ghcr.io/matheuszem12/activity-manager-backend:${AM_TAG:-dev}
+    container_name: activity-backend
+    restart: unless-stopped
+    ports:
+      # Loopback: nada daqui é alcançável de fora sem o túnel. 8091 porque a
+      # 8080 é do finance e a 8090 do lingua nesta máquina.
+      - "127.0.0.1:${AM_PORTA_HOST:-8091}:8090"
+    env_file:
+      - .env
+    environment:
+      # `postgres_activity` é o nome do CONTÊINER do outro compose, e 5432 é a
+      # porta de DENTRO dele — a 5434 do host não tem nada a ver com isto. Os
+      # dois se encontram pela rede activity-net.
+      AM_DB_URL: jdbc:postgresql://postgres_activity:5432/${AM_DB_NOME:-activity_manager}
+      # Fixa, e DEPOIS do env_file para vencer qualquer valor que caia lá. O
+      # env_file despeja o .env inteiro no contêiner, e a aplicação lê AM_PORTA
+      # para escolher a porta do Tomcat: com o mesmo nome nos dois lados, pôr
+      # 8091 no .env faria o servidor escutar em 8091 lá dentro enquanto o
+      # mapeamento aponta para a 8090. Nada responderia, e o log diria
+      # "Started" — a pior combinação possível.
+      AM_PORTA: 8090
+    # A JVM roda com -XX:MaxRAMPercentage=75, e o percentual é sobre a memória
+    # que ela ENXERGA. Sem limite ela enxerga o host inteiro, numa máquina que
+    # também roda o finance e o lingua. Com o limite, os 75% valem sobre 600m.
+    #
+    # Este backend não faz nada pesado: sem Whisper, sem síntese de voz, sem
+    # processamento de mídia. É CRUD e agregação.
+    #
+    # memswap igual ao mem_limit = sem swap. O GC toca a heap inteira, então
+    # uma JVM em swap para de responder por minutos — indistinguível de queda.
+    mem_limit: 600m
+    memswap_limit: 600m
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8090/api/saude"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    networks:
+      - activity-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ------------------------------------------------------------------ túnel
+  #
+  # Só sobe com `docker compose --profile tunel up -d`. Desligado por padrão
+  # porque ele é a única peça que EXPÕE o serviço na internet.
+  #
+  # Por que cloudflared e não abrir a 443: a VPS não precisa aceitar conexão
+  # nenhuma. O cloudflared abre uma conexão de SAÍDA até a Cloudflare e o
+  # tráfego volta por ela. Firewall fechado, TLS resolvido lá, e o IP da VPS
+  # não aparece em lugar nenhum.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: activity-tunel
+    restart: unless-stopped
+    profiles: [tunel]
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${AM_TUNEL_TOKEN:?defina AM_TUNEL_TOKEN no .env}
+    mem_limit: 128m
+    depends_on:
+      - activity-backend
+    networks:
+      - activity-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# NÃO há watchtower aqui, e é de propósito: o compose do finance nesta VPS já
+# roda um com WATCHTOWER_LABEL_ENABLE=false, que vigia TODOS os contêineres da
+# máquina — inclusive estes. Um segundo seria outro processo disputando o mesmo
+# /var/run/docker.sock, e os dois usariam `container_name: watchtower`.
+
+networks:
+  activity-net:
+    external: true
