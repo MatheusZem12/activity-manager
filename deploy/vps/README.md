@@ -101,7 +101,7 @@ nome `activity-manager`. Em **Public Hostname → Add**:
 
 | campo | valor |
 |---|---|
-| Subdomain | `rastro` |
+| Subdomain | `activity-manager` |
 | Domain | `matheuszem.org` |
 | Service Type | `HTTP` |
 | URL | `activity-backend:8090` |
@@ -109,6 +109,11 @@ nome `activity-manager`. Em **Public Hostname → Add**:
 `activity-backend:8090` e **não** `127.0.0.1:8091`: o conector roda *dentro* da
 rede `activity-net`, junto do backend, e ali valem o nome do contêiner e a porta
 de dentro. A 8091 é do host, e o contêiner não a enxerga.
+
+O nome do subdomínio **não está em código nenhum** — nem no compose, nem no
+backend, nem no app. Ele existe em dois lugares só: aqui no painel e no campo
+"Servidor" do app. Se quiser `activity.matheuszem.org` ou `am.matheuszem.org`,
+troque nos dois e pronto.
 
 Copie o token e:
 
