@@ -552,6 +552,7 @@ async function renderPanelMode() {
           <div class="logo"><span>Activity</span> Manager</div>
           <div class="topbar-acoes">
             <button class="panel-acao" id="panel-flip" title="Trocar o painel de lado">⇄</button>
+            <button class="panel-acao" id="panel-collapse" title="Recolher (Ctrl+Alt+P traz de volta)">‒</button>
             <button class="panel-close" id="panel-close" title="Fechar">&times;</button>
           </div>
         </div>
@@ -582,15 +583,26 @@ async function renderPanelMode() {
 
   // Trocar de lado é decisão que se toma OLHANDO a tela, não lendo formulário.
   // Por isso é botão no cabeçalho e não campo em Configurações.
+  //
+  // `botao` guardado ANTES do await, e não `e.currentTarget` depois dele.
+  // `currentTarget` só existe enquanto o evento está sendo despachado: passado o
+  // primeiro await ele é null, o `finally` lança, e o botão fica desabilitado
+  // para sempre — com cara de "carregando" eterno. `e.target` sobreviveria, mas
+  // apontaria para o que foi clicado, que pode ser um filho.
   document.getElementById('panel-flip').addEventListener('click', async (e) => {
-    e.currentTarget.disabled = true;
+    const botao = e.currentTarget;
+    botao.disabled = true;
     try {
       const { panelSide } = await API.flipPanel();
       toast(panelSide === 'left' ? 'Painel à esquerda' : 'Painel à direita');
+    } catch (err) {
+      toast(err.message);
     } finally {
-      e.currentTarget.disabled = false;
+      botao.disabled = false;
     }
   });
+
+  document.getElementById('panel-collapse').addEventListener('click', () => API.collapsePanel());
 
   renderScreen();
 }
@@ -1352,8 +1364,9 @@ async function renderAccountTab(body) {
   `;
 
   document.getElementById('btn-sync').addEventListener('click', async (ev) => {
-    ev.currentTarget.disabled = true;
-    ev.currentTarget.textContent = 'Sincronizando…';
+    const botao = ev.currentTarget;              // antes do await — veja panel-flip
+    botao.disabled = true;
+    botao.textContent = 'Sincronizando…';
     try {
       await RastroAPI.sincronizar();
       toast('Sincronizado');
@@ -1464,9 +1477,16 @@ async function renderIaTab(body) {
     const chave = document.getElementById('ia-chave').value.trim();
     if (chave) patch.chaveIa = chave;
 
-    ev.currentTarget.disabled = true;
-    await RastroAPI.configurar(patch);
-    toast('Configuração de IA salva');
+    const botao = ev.currentTarget;              // antes do await — veja panel-flip
+    botao.disabled = true;
+    try {
+      await RastroAPI.configurar(patch);
+      toast('Configuração de IA salva');
+    } catch (err) {
+      toast(err.message);
+      botao.disabled = false;
+      return;
+    }
     renderIaTab(body);
   });
 }

@@ -109,16 +109,18 @@ function parseAccelerator(accelerator) {
  * se aplica e o compositor centraliza a janela float. Verificado na 0.55.2.
  */
 function panelWindowRules(config) {
+  // A lateral inteira: 8px de margem em cima, embaixo e na borda escolhida.
+  // Era 90% da altura centralizado, e a sobra não servia para nada.
   const move = config.panelSide === 'left'
-    ? 'move 8 (monitor_h*0.05)'
-    : 'move (monitor_w-window_w-8) (monitor_h*0.05)';
+    ? 'move 8 8'
+    : 'move (monitor_w-window_w-8) 8';
   return `# Painel (ajusta size/move conforme panelSide).
 #
 # Sem stay_focused aqui, de propósito — ao contrário das janelas de captura,
 # o painel FICA aberto. Com stay_focused ele prenderia o teclado e você não
 # conseguiria digitar em mais nenhuma janela enquanto ele estivesse na tela.
 windowrule = float on, ${PANEL_MATCH}
-windowrule = size 420 90%, ${PANEL_MATCH}
+windowrule = size 420 (monitor_h-16), ${PANEL_MATCH}
 windowrule = ${move}, ${PANEL_MATCH}
 windowrule = pin on, ${PANEL_MATCH}`;
 }
