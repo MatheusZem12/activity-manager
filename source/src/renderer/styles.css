@@ -1207,3 +1207,206 @@ html, body {
   line-height: 1.5;
   margin: 24px 0 0;
 }
+
+/* ---------- Barra de rolagem ----------
+   A nativa do GTK aparece clara, larga e com setas — num painel escuro de 420px
+   ela come espaço e chama mais atenção que o conteúdo. Fina, sem seta, e só
+   visível quando há o que rolar. */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface-2) transparent;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--surface-2);
+  border-radius: 4px;
+  /* A borda transparente afina o polegar sem estreitar a área de clique. */
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: #475569; background-clip: content-box; }
+::-webkit-scrollbar-corner { background: transparent; }
+/* Setas de cima e de baixo: herança de desktop antigo, e o gesto de rolar não
+   passa por elas há anos. */
+::-webkit-scrollbar-button { display: none; }
+
+/* ---------- Ações do cabeçalho ---------- */
+
+.topbar-acoes {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.panel-acao {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.panel-acao:hover { color: var(--text); background: var(--surface-2); }
+.panel-acao:disabled { opacity: 0.4; cursor: wait; }
+
+/* ---------- Tela de configurações ---------- */
+
+.cfg-secao {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 14px 14px 6px;
+  margin-bottom: 12px;
+}
+
+.cfg-titulo {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 12px;
+}
+
+/* Número com a unidade ao lado: "15" sozinho num campo não diz se é minuto ou
+   hora, e a dica embaixo chega tarde demais. */
+.cfg-numero {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cfg-numero input {
+  width: 90px;
+  flex-shrink: 0;
+}
+.cfg-numero span {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* A linha inteira alterna a caixa — alvo de 12px é alvo de mouse preciso. */
+.cfg-chave {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  padding: 4px 0 12px;
+}
+.cfg-chave input {
+  width: auto;
+  margin: 2px 0 0;
+  flex-shrink: 0;
+}
+.cfg-chave span { font-size: 13px; line-height: 1.4; }
+.cfg-chave em {
+  display: block;
+  font-style: normal;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+.form-hint code {
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+/* ---------- Configurações: pares, notas e escolhas ---------- */
+
+.cfg-par {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 12px;
+  padding: 5px 0;
+}
+.cfg-par span { color: var(--text-muted); }
+.cfg-par code {
+  background: var(--surface-2);
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cfg-nota {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.55;
+  margin: 0 0 10px;
+}
+.cfg-nota.erro { color: var(--danger); }
+.cfg-nota code {
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+/* Escolha exclusiva como cartão: o rádio de 13px é alvo pequeno demais, e a
+   nota embaixo é o que faz a escolha ser informada. */
+.cfg-opcao {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  border: 1px solid var(--surface-2);
+  cursor: pointer;
+}
+.cfg-opcao:hover { border-color: #475569; }
+.cfg-opcao.ativa {
+  border-color: var(--primary);
+  background: rgba(99, 102, 241, 0.08);
+}
+.cfg-opcao input { width: auto; margin: 2px 0 0; flex-shrink: 0; }
+.cfg-opcao span { font-size: 13px; line-height: 1.35; }
+.cfg-opcao em {
+  display: block;
+  font-style: normal;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 3px;
+  line-height: 1.45;
+}
+.cfg-opcao em code {
+  background: var(--surface-2);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* Não detectado continua clicável de propósito: instalar o ollama depois não
+   deveria exigir voltar aqui e descobrir que a opção sumiu. */
+.cfg-opcao.indisponivel { opacity: 0.55; }
+
+.volume-row { display: flex; align-items: center; gap: 10px; }
+.volume-row input[type="range"] { flex: 1; }
+
+/* Campo de texto dentro de uma seção ocupa a linha. A largura padrão do
+   `input` é a do atributo `size`, ~20 caracteres — o placeholder já não cabe. */
+.cfg-secao input[type="text"],
+.cfg-secao input[type="password"],
+.cfg-secao input[type="email"] {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text);
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 12px;
+}
+.cfg-secao input[type="text"]:focus,
+.cfg-secao input[type="password"]:focus { outline: none; border-color: var(--primary); }
+
+.cfg-secao .form-hint { margin-top: 6px; }

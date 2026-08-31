@@ -474,10 +474,20 @@ async function carregarDoServidor() {
   }
 }
 
-/** Move `activities.json` e `entries.json` para o banco e marca como migrados. */
+/**
+ * Move `activities.json` e `entries.json` para o banco e marca como migrados.
+ *
+ * A marca é **por servidor**, e isso não é preciosismo: a primeira versão
+ * gravava uma marca global, escrita quando o app ainda apontava para o banco de
+ * desenvolvimento. Ao trocar para a VPS, a migração não rodava — os dados
+ * continuavam nos arquivos, e a tela mostrava "Pendentes (0)" como se tivessem
+ * sumido. Cada banco precisa da sua própria migração.
+ */
 async function migrarArquivosAntigos() {
   const fs = require('fs');
-  const marca = path.join(app.getPath('userData'), 'migrado-para-o-banco.json');
+  const servidor = require('./src/main/rastro/servidor');
+  const apelido = servidor.endereco().replace(/^https?:\/\//, '').replace(/[^\w.-]/g, '_');
+  const marca = path.join(app.getPath('userData'), `migrado-para-${apelido}.json`);
   if (fs.existsSync(marca)) return;
 
   const ler = (nome) => {
@@ -500,8 +510,12 @@ async function migrarArquivosAntigos() {
 
   // Os arquivos NÃO são apagados: se algo der errado na primeira semana, o
   // original ainda está lá. A marca é o que impede reimportar toda subida.
-  fs.writeFileSync(marca, JSON.stringify({ em: new Date().toISOString(), ...resultado }, null, 2));
-  console.log('[dados] migrado para o banco:', JSON.stringify(resultado));
+  fs.writeFileSync(marca, JSON.stringify({
+    servidor: servidor.endereco(),
+    em: new Date().toISOString(),
+    ...resultado
+  }, null, 2));
+  console.log(`[dados] migrado para ${servidor.endereco()}:`, JSON.stringify(resultado));
 }
 
 // ---------- IPC ----------
@@ -683,46 +697,6 @@ ipcMain.handle('config:save', async (_event, patch) => {
  * textos do clipboard. O formato antigo (só atividades, sem a chave `entries`)
  * continua sendo aceito na importação — nesse caso os textos ficam intactos.
  */
-ipcMain.handle('backup:export', async () => {
-  const { filePath } = await dialog.showSaveDialog({
-    defaultPath: `activity-manager-backup-${new Date().toISOString().slice(0, 10)}.json`,
-    filters: [{ name: 'JSON', extensions: ['json'] }]
-  });
-  if (!filePath) return null;
-  const exported = { ...activityStore.exportAll(), entries: entryStore.exportAll().entries };
-  require('fs').writeFileSync(filePath, JSON.stringify(exported, null, 2), 'utf-8');
-  return filePath;
-});
-
-ipcMain.handle('backup:import', async () => {
-  const { filePaths, canceled } = await dialog.showOpenDialog({
-    properties: ['openFile'],
-    filters: [{ name: 'JSON', extensions: ['json'] }]
-  });
-  if (canceled || filePaths.length === 0) return null;
-  const content = require('fs').readFileSync(filePaths[0], 'utf-8');
-  const imported = JSON.parse(content);
-  const result = await activityStore.importAll(imported);
-
-  // `entries` só existe nos backups do app já com clipboard — sem a chave,
-  // preserva o que está salvo em vez de apagar tudo.
-  if (Array.isArray(imported.entries)) {
-    const entryResult = await entryStore.importAll({ version: imported.version, entries: imported.entries });
-    result.entryCount = entryResult.count;
-  }
-
-  // Reagenda tudo.
-  scheduler.cancelAll();
-  for (const activity of activityStore.getPending()) {
-    if (activity.dueAt > Date.now()) {
-      scheduleActivityNotification(activity);
-    }
-  }
-  updateTrayMenu();
-  sendToPanel('state:reload', buildState());
-  return result;
-});
-
 ipcMain.handle('quick:close', () => {
   if (quickWindow && !quickWindow.isDestroyed()) {
     quickWindow.close();
@@ -737,6 +711,43 @@ ipcMain.handle('window:showPanel', () => {
 
 // O botão × no cabeçalho do painel: mesma ideia do close() nativo — some para
 // a bandeja em vez de destruir a janela.
+/**
+ * Vira o painel de lado.
+ *
+ * Era um campo na aba Geral, e estava no lugar errado: trocar de lado é algo que
+ * se decide OLHANDO a tela, não lendo um formulário. Como botão no cabeçalho,
+ * a resposta é imediata e a escolha se avalia sozinha.
+ *
+ * Continua persistido no config — vira preferência depois de decidida, não antes.
+ */
+ipcMain.handle('panel:flip', async () => {
+  const atual = configStore.getConfig().panelSide === 'left' ? 'left' : 'right';
+  const novo = atual === 'left' ? 'right' : 'left';
+  configStore.saveConfig({ panelSide: novo });
+
+  // Três passos, e nenhum é redundante:
+  //
+  //   setBounds   ambientes que não são Wayland obedecem
+  //   sync        reescreve a windowrule, para a PRÓXIMA vez que a janela nascer
+  //   dispatch    move a janela que já está na tela agora
+  //
+  // A regra sozinha não bastaria: `windowrule = move` só vale na criação.
+  // E no Wayland o cliente não se posiciona — quem move é o compositor.
+  const destino = panelBounds();
+  if (panelWindow && !panelWindow.isDestroyed()) panelWindow.setBounds(destino);
+  await syncShortcut();
+  if (hypr.isHyprland()) {
+    // `panelBounds()` já calculou o pixel a partir da área útil do monitor —
+    // que é o que o dispatcher aceita. Expressão ali falha em silêncio.
+    await hypr.moveWindow(PANEL_WINDOW_TITLE, destino).catch((e) => {
+      console.warn('[painel] não consegui mover:', e.message);
+    });
+  }
+
+  sendToPanel('config:updated', configStore.getConfig());
+  return { panelSide: novo };
+});
+
 ipcMain.handle('panel:close', () => {
   if (panelWindow && !panelWindow.isDestroyed()) {
     panelWindow.close();
