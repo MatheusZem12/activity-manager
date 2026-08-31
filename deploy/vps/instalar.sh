@@ -28,12 +28,25 @@ command -v docker >/dev/null || { echo "docker não encontrado. Instale antes.";
 docker compose version >/dev/null 2>&1 || { echo "'docker compose' (plugin v2) não encontrado."; exit 1; }
 ok "docker $(docker --version | grep -oP '\d+\.\d+\.\d+' | head -1)"
 
-# Porta ocupada é o jeito mais rápido de a subida falhar sem dizer por quê.
-for porta in 5434 8091; do
-  if ss -lptn 2>/dev/null | grep -q ":${porta} "; then
-    aviso "porta ${porta} já está em uso — ajuste AM_DB_PORTA/AM_PORTA_HOST no .env"
-  fi
-done
+# Porta ocupada é o jeito mais rápido de a subida falhar sem dizer por quê — e
+# o erro que o Docker dá ("Bind for 0.0.0.0:5434 failed") não diz o que fazer.
+# Então em vez de avisar e tentar assim mesmo, procuramos a próxima livre.
+#
+# Nesta VPS a 5432/8080 é do finance e a 5433/8090 é do lingua; 5434/8091 é o
+# próximo par vago, mas isso muda conforme a máquina cresce.
+porta_livre() {
+  local porta="$1"
+  while ss -lntH 2>/dev/null | grep -qE "[:.]${porta}[[:space:]]"; do
+    porta=$((porta + 1))
+  done
+  printf '%s' "${porta}"
+}
+
+PORTA_DB="$(porta_livre 5434)"
+PORTA_API="$(porta_livre 8091)"
+[[ "${PORTA_DB}"  != 5434 ]] && aviso "5434 ocupada — usando ${PORTA_DB} para o banco"
+[[ "${PORTA_API}" != 8091 ]] && aviso "8091 ocupada — usando ${PORTA_API} para a API"
+ok "portas: banco ${PORTA_DB}, api ${PORTA_API}"
 
 # ------------------------------------------------------------------- estrutura
 azul "2. Criando ${RAIZ}"
@@ -66,7 +79,7 @@ AM_DB_NOME=activity_manager
 AM_DB_USER=activity
 AM_DB_SENHA=${SENHA_DB}
 # 127.0.0.1 apenas — veja o docker-compose.yml
-AM_DB_PORTA=5434
+AM_DB_PORTA=${PORTA_DB}
 EOF
   chmod 600 "${RAIZ}/postgres/.env"
   ok "postgres/.env criado, senha gerada"
@@ -91,7 +104,7 @@ AM_JWT_DIAS=30
 AM_MAX_CONTAS=5
 
 # --- portas no host ---
-AM_PORTA_HOST=8091
+AM_PORTA_HOST=${PORTA_API}
 
 # --- imagem ---
 AM_TAG=dev
@@ -118,20 +131,161 @@ fi
 
 # ------------------------------------------------------------------- composes
 azul "4. Composes"
-AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-for parte in postgres service; do
-  if [[ -f "${AQUI}/${parte}/docker-compose.yml" ]]; then
-    cp "${AQUI}/${parte}/docker-compose.yml" "${RAIZ}/${parte}/docker-compose.yml"
-    ok "${parte}/docker-compose.yml"
-  else
-    aviso "${parte}/docker-compose.yml não encontrado ao lado deste script"
-  fi
-done
+
+# Embutidos, e não copiados de arquivos vizinhos: assim este script é UM arquivo
+# só. Na VPS você não tem o repositório — levar uma árvore de diretórios por scp
+# é justamente o passo em que dá errado.
+#
+# Os delimitadores estão entre aspas ('COMPOSE') para o shell NÃO expandir os
+# ${...} — eles têm que chegar literais no YAML, senão o Compose recebe tudo
+# vazio e o erro só aparece na hora de subir.
+
+cat > "${RAIZ}/postgres/docker-compose.yml" <<'COMPOSE_POSTGRES'
+# O banco, sozinho no seu compose.
+#
+# Separado do serviço de propósito: atualizar a imagem do backend não pode ter
+# nada a ver com derrubar o Postgres. São ciclos de vida diferentes — um muda
+# a cada push, o outro quase nunca.
+services:
+  db:
+    image: postgres:16
+    container_name: postgres_activity
+    restart: always
+    environment:
+      POSTGRES_USER: ${AM_DB_USER:-activity}
+      POSTGRES_PASSWORD: ${AM_DB_SENHA:?defina AM_DB_SENHA no .env}
+      POSTGRES_DB: ${AM_DB_NOME:-activity_manager}
+    ports:
+      # 127.0.0.1 e não 0.0.0.0: o banco só ouve a própria VPS. Quem varre a
+      # internet procurando Postgres exposto não tem o que achar aqui.
+      #
+      # 5434 porque a 5432 já é do finance e a 5433 do lingua nesta máquina.
+      - "127.0.0.1:${AM_DB_PORTA:-5434}:5432"
+    # Segmento de foco é linha curta e numérica: um ano de uso não chega perto
+    # de encher isto. Serve para limitar crescimento, não para apertar.
+    mem_limit: 512m
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AM_DB_USER:-activity} -d ${AM_DB_NOME:-activity_manager}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - activity-net
+
+volumes:
+  postgres_data:
+
+# Externa: criada uma vez com `docker network create activity-net`, fora dos
+# dois composes. Assim nenhum deles cria nem destrói a rede do outro.
+networks:
+  activity-net:
+    external: true
+COMPOSE_POSTGRES
+ok "postgres/docker-compose.yml"
+
+cat > "${RAIZ}/service/docker-compose.yml" <<'COMPOSE_SERVICE'
+# O backend e o túnel.
+services:
+  activity-backend:
+    image: ghcr.io/matheuszem12/activity-manager-backend:${AM_TAG:-dev}
+    container_name: activity-backend
+    restart: unless-stopped
+    ports:
+      # Loopback: nada daqui é alcançável de fora sem o túnel. 8091 porque a
+      # 8080 é do finance e a 8090 do lingua nesta máquina.
+      - "127.0.0.1:${AM_PORTA_HOST:-8091}:8090"
+    env_file:
+      - .env
+    environment:
+      # `postgres_activity` é o nome do CONTÊINER do outro compose, e 5432 é a
+      # porta de DENTRO dele — a 5434 do host não tem nada a ver com isto. Os
+      # dois se encontram pela rede activity-net.
+      AM_DB_URL: jdbc:postgresql://postgres_activity:5432/${AM_DB_NOME:-activity_manager}
+      # Fixa, e DEPOIS do env_file para vencer qualquer valor que caia lá. O
+      # env_file despeja o .env inteiro no contêiner, e a aplicação lê AM_PORTA
+      # para escolher a porta do Tomcat: com o mesmo nome nos dois lados, pôr
+      # 8091 no .env faria o servidor escutar em 8091 lá dentro enquanto o
+      # mapeamento aponta para a 8090. Nada responderia, e o log diria
+      # "Started" — a pior combinação possível.
+      AM_PORTA: 8090
+    # A JVM roda com -XX:MaxRAMPercentage=75, e o percentual é sobre a memória
+    # que ela ENXERGA. Sem limite ela enxerga o host inteiro, numa máquina que
+    # também roda o finance e o lingua. Com o limite, os 75% valem sobre 600m.
+    #
+    # Este backend não faz nada pesado: sem Whisper, sem síntese de voz, sem
+    # processamento de mídia. É CRUD e agregação.
+    #
+    # memswap igual ao mem_limit = sem swap. O GC toca a heap inteira, então
+    # uma JVM em swap para de responder por minutos — indistinguível de queda.
+    mem_limit: 600m
+    memswap_limit: 600m
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8090/api/saude"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    networks:
+      - activity-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ------------------------------------------------------------------ túnel
+  #
+  # Só sobe com `docker compose --profile tunel up -d`. Desligado por padrão
+  # porque ele é a única peça que EXPÕE o serviço na internet.
+  #
+  # Por que cloudflared e não abrir a 443: a VPS não precisa aceitar conexão
+  # nenhuma. O cloudflared abre uma conexão de SAÍDA até a Cloudflare e o
+  # tráfego volta por ela. Firewall fechado, TLS resolvido lá, e o IP da VPS
+  # não aparece em lugar nenhum.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: activity-tunel
+    restart: unless-stopped
+    profiles: [tunel]
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${AM_TUNEL_TOKEN:?defina AM_TUNEL_TOKEN no .env}
+    mem_limit: 128m
+    depends_on:
+      - activity-backend
+    networks:
+      - activity-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# NÃO há watchtower aqui, e é de propósito: o compose do finance nesta VPS já
+# roda um com WATCHTOWER_LABEL_ENABLE=false, que vigia TODOS os contêineres da
+# máquina — inclusive estes. Um segundo seria outro processo disputando o mesmo
+# /var/run/docker.sock, e os dois usariam `container_name: watchtower`.
+
+networks:
+  activity-net:
+    external: true
+COMPOSE_SERVICE
+ok "service/docker-compose.yml"
 
 # ---------------------------------------------------------------------- banco
 azul "5. Subindo o banco"
 cd "${RAIZ}/postgres"
-docker compose up -d
+if ! docker compose up -d; then
+  aviso "o banco não subiu. Veja o erro acima; o .env já está em ${RAIZ}/postgres/.env"
+  exit 1
+fi
 printf '  aguardando ficar saudável'
 for _ in $(seq 1 30); do
   if [[ "$(docker inspect -f '{{.State.Health.Status}}' postgres_activity 2>/dev/null)" == "healthy" ]]; then
@@ -146,7 +300,8 @@ azul "6. Pronto até aqui"
 cat <<RESUMO
 
   Estrutura:   ${RAIZ}/{postgres,service}
-  Banco:       127.0.0.1:5434  (só a própria VPS enxerga)
+               (para outro lugar: AM_RAIZ=~/sevices/activity-manager bash instalar.sh)
+  Banco:       127.0.0.1:${PORTA_DB}  (só a própria VPS enxerga)
   Convite:     ${CONVITE}
                ↑ você vai digitar isto uma vez em cada dispositivo
 
@@ -158,7 +313,7 @@ cat <<RESUMO
   2) Subir o serviço:
          cd ${RAIZ}/service && docker compose up -d
          docker logs -f activity-backend       # espere "Started Aplicacao"
-         curl -fsS localhost:8091/api/saude    # {"estado":"ok"}
+         curl -fsS localhost:${PORTA_API}/api/saude    # {"estado":"ok"}
 
   3) Expor pelo subdomínio — no painel da Cloudflare:
          Zero Trust > Networks > Tunnels > Create a tunnel > Cloudflared
@@ -169,7 +324,7 @@ cat <<RESUMO
              Service Type  HTTP
              URL           activity-backend:8090
 
-     'activity-backend:8090' e NÃO '127.0.0.1:8091': o conector roda DENTRO
+     'activity-backend:8090' e NÃO '127.0.0.1:${PORTA_API}': o conector roda DENTRO
      da rede activity-net, junto do backend, e ali valem o nome do contêiner e
      a porta de dentro.
 
