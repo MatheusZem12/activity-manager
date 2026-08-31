@@ -107,7 +107,7 @@ AM_MAX_CONTAS=5
 AM_PORTA_HOST=8091
 
 # --- imagem ---
-AM_TAG=dev
+AM_TAG=hmg
 
 # --- IA ---
 # 'local' = o servidor NÃO chama modelo nenhum: ele monta a pergunta e um
@@ -188,7 +188,7 @@ ok "postgres/docker-compose.yml"
 cat > "${RAIZ}/service/docker-compose.yml" <<'COMPOSE_SERVICE'
 services:
   activity-backend:
-    image: ghcr.io/matheuszem12/activity-manager-backend:${AM_TAG:-dev}
+    image: ghcr.io/matheuszem12/activity-manager-backend:${AM_TAG:-hmg}
     container_name: activity-backend
     restart: unless-stopped
     ports:
@@ -307,7 +307,8 @@ cat <<RESUMO
   FALTA:
 
   1) A imagem do backend precisa existir no GHCR. No seu PC:
-         git push        (o Actions constrói e publica)
+         git checkout hmg && git merge dev && git push
+         (push em `dev` não publica nada — quem sobe é `hmg`)
 
   2) Subir o serviço:
          cd ${RAIZ}/service && docker compose up -d
