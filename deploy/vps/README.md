@@ -34,19 +34,46 @@ composes — criada uma vez, e nenhum dos dois a destrói ao descer.
 
 ## Passo a passo
 
+O `instalar.sh` é **um arquivo só e autossuficiente** — os dois composes estão
+embutidos nele. Na VPS você não tem o repositório, e levar uma árvore de
+diretórios por `scp` é justamente o passo em que dá errado.
+
 ```bash
-# 1. Na sua máquina: publica a imagem
+# 1. NA SUA MÁQUINA (onde o repositório está): publica a imagem
 git push
 
-# 2. Na VPS: monta tudo e sobe o banco
-scp -r deploy/vps/* usuario@vps:~/instalador/
-ssh usuario@vps
-bash ~/instalador/instalar.sh
+# 2. NA SUA MÁQUINA: manda só o script.
+#    Troque root@SEU-IP pelo endereço real da VPS — não é literal.
+scp deploy/vps/instalar.sh root@SEU-IP:~/
 
-# 3. Ainda na VPS: sobe o serviço
+# 3. NA VPS
+bash ~/instalar.sh
+
+# 4. Ainda na VPS: sobe o serviço
 cd ~/activity-manager/service && docker compose up -d
 docker logs -f activity-backend        # espere "Started Aplicacao"
 curl -fsS localhost:8091/api/saude     # {"estado":"ok"}
+```
+
+Se preferir não usar `scp`, estando já conectado na VPS dá para colar o script
+inteiro num heredoc:
+
+```bash
+cat > ~/instalar.sh <<'FIM'
+   (cole aqui o conteúdo de deploy/vps/instalar.sh)
+FIM
+bash ~/instalar.sh
+```
+
+O script **escolhe porta livre sozinho**. Nesta VPS a 5432/8080 é do finance e a
+5433/8090 é do lingua, então ele tende a pegar 5434/8091 — mas se estiverem
+ocupadas, ele anda para a próxima e grava a escolhida no `.env`, em vez de
+morrer com um "Bind for 0.0.0.0:5434 failed" que não diz o que fazer.
+
+Para instalar em outro lugar que não `~/activity-manager`:
+
+```bash
+AM_RAIZ=~/sevices/activity-manager bash ~/instalar.sh
 ```
 
 O `instalar.sh` gera o segredo do JWT, a senha do banco e o convite, e **imprime
