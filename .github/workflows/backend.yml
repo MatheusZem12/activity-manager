@@ -13,9 +13,18 @@ on:
     # Uma tag por branch: hmg publica :hmg, main publica :main. A VPS escolhe
     # qual usa pelo AM_TAG do .env, então homologar não mexe no que está no ar.
     branches: [hmg, main]
-    paths:
-      - 'backend/**'
-      - '.github/workflows/backend.yml'
+  # Sem filtro de `paths`, de propósito. Duas razões:
+  #
+  # 1. Numa branch recém-criada o GitHub não avalia o filtro de forma confiável
+  #    e o build simplesmente não roda — foi o que aconteceu ao criar a `hmg`,
+  #    e o sintoma é a VPS não achar a imagem sem nenhum erro em lugar nenhum.
+  #
+  # 2. Filtro de caminho numa branch de DEPLOY é errado de qualquer forma. Push
+  #    em `hmg` quer dizer "publica isto", mesmo que a mudança tenha sido só no
+  #    compose ou no README. Republicar uma imagem idêntica é barato; descobrir
+  #    que ela não subiu, não.
+
+  # Botão manual: útil para republicar sem precisar de um commit vazio.
   workflow_dispatch:
 
 env:
