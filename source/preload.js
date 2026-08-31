@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('activityAPI', {
   showPanelWindow: () => ipcRenderer.invoke('window:showPanel'),
   closePanelWindow: () => ipcRenderer.invoke('panel:close'),
   flipPanel: () => ipcRenderer.invoke('panel:flip'),
+  collapsePanel: () => ipcRenderer.invoke('panel:collapse'),
   getShortcutStatus: () => ipcRenderer.invoke('shortcut:status'),
   checkShortcutConflict: (accelerator) => ipcRenderer.invoke('shortcut:conflict', accelerator),
 

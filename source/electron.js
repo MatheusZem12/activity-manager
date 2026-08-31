@@ -52,13 +52,16 @@ function ensurePanelWindow() {
 function panelBounds() {
   const { workArea } = screen.getPrimaryDisplay();
   const width = 420;
-  const height = Math.round(workArea.height * 0.9);
   const margin = 8;
+  // A lateral inteira. Era 90% da altura, e a sobra em cima e embaixo não
+  // servia para nada: `workArea` já exclui a waybar, então o painel encosta
+  // sem cobrir nada do sistema.
+  const height = workArea.height - margin * 2;
   const side = configStore.getConfig().panelSide === 'left' ? 'left' : 'right';
   const x = side === 'left'
     ? workArea.x + margin
     : workArea.x + workArea.width - width - margin;
-  const y = workArea.y + Math.round((workArea.height - height) / 2);
+  const y = workArea.y + margin;
   return { x, y, width, height };
 }
 
@@ -725,17 +728,18 @@ ipcMain.handle('panel:flip', async () => {
   const novo = atual === 'left' ? 'right' : 'left';
   configStore.saveConfig({ panelSide: novo });
 
-  // Três passos, e nenhum é redundante:
+  // Ordem escolhida pelo que o usuário vê:
   //
-  //   setBounds   ambientes que não são Wayland obedecem
-  //   sync        reescreve a windowrule, para a PRÓXIMA vez que a janela nascer
-  //   dispatch    move a janela que já está na tela agora
+  //   setBounds + dispatch   move a janela AGORA — é a resposta ao clique
+  //   syncShortcut           reescreve a windowrule, para a próxima vez que a
+  //                          janela nascer — e roda SEM bloquear o retorno
   //
-  // A regra sozinha não bastaria: `windowrule = move` só vale na criação.
-  // E no Wayland o cliente não se posiciona — quem move é o compositor.
+  // A regra sozinha não bastaria (`windowrule = move` só vale na criação) e o
+  // dispatch sozinho também não (some no próximo start). Mas o `syncShortcut`
+  // reescreve a config do Hyprland e chama `hyprctl reload`: são segundos, e
+  // esperar por ele deixava o botão parecendo travado.
   const destino = panelBounds();
   if (panelWindow && !panelWindow.isDestroyed()) panelWindow.setBounds(destino);
-  await syncShortcut();
   if (hypr.isHyprland()) {
     // `panelBounds()` já calculou o pixel a partir da área útil do monitor —
     // que é o que o dispatcher aceita. Expressão ali falha em silêncio.
@@ -744,8 +748,26 @@ ipcMain.handle('panel:flip', async () => {
     });
   }
 
+  syncShortcut().catch((e) => console.warn('[painel] regra não reescrita:', e.message));
+
   sendToPanel('config:updated', configStore.getConfig());
   return { panelSide: novo };
+});
+
+/**
+ * Recolhe o painel.
+ *
+ * Recolher é esconder, e não virar um trilho na borda. Um trilho sempre visível
+ * exigiria `layer-shell` para RESERVAR espaço — o protocolo que a waybar usa e
+ * que o Electron não fala. Sem ele, a faixa ficaria por CIMA da borda do que
+ * estivesse embaixo, cobrindo o editor o dia inteiro para economizar um atalho.
+ *
+ * Escondido, o painel volta pelo `Ctrl+Alt+P` ou pela bandeja — e o coletor
+ * continua registrando, porque ele nunca dependeu da janela estar aberta.
+ */
+ipcMain.handle('panel:collapse', () => {
+  if (panelWindow && !panelWindow.isDestroyed()) panelWindow.hide();
+  return { recolhido: true };
 });
 
 ipcMain.handle('panel:close', () => {
