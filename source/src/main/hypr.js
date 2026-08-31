@@ -82,27 +82,4 @@ async function findConflict({ modifiers, key }) {
   };
 }
 
-/**
- * Move uma janela JÁ ABERTA para as coordenadas dadas.
- *
- * Existe porque a `windowrule = move ...` só vale quando a janela NASCE:
- * reescrever a regra não mexe no que já está na tela. E no Wayland o cliente não
- * se posiciona sozinho — o `setBounds` do Electron é ignorado. Quem move é o
- * compositor, por dispatch.
- *
- * **Números puros, nunca expressão.** As formas `(monitor_w-window_w-8)` e
- * `monitor_h*0.05` valem em `windowrule`, e SÓ lá. Passadas a um dispatcher, o
- * `hyprctl` responde `ok` e a janela não sai do lugar — verificado: a posição
- * antes e depois era a mesma, sem erro em lugar nenhum. Falha silenciosa é o
- * caro aqui, então quem calcula é quem chama.
- */
-async function moveWindow(titulo, { x, y }) {
-  await hyprctl([
-    'dispatch', 'movewindowpixel',
-    `exact ${Math.round(x)} ${Math.round(y)},title:^(${titulo})$`
-  ]);
-}
-
-module.exports = {
-  isHyprland, hyprctl, reload, configErrors, listBinds, findConflict, modMask, moveWindow
-};
+module.exports = { isHyprland, hyprctl, reload, configErrors, listBinds, findConflict, modMask };

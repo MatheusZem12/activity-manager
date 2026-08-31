@@ -15,19 +15,29 @@ public class CategoriaServico {
      *
      * As descrições estão escritas para o modelo ler, não para enfeitar a UI —
      * são elas que vão para o prompt.
+     *
+     * As cores foram VERIFICADAS, não escolhidas no olho. A paleta anterior
+     * ({@code #4C8DFF} azul e {@code #B37CFF} roxo lado a lado) tinha ΔE 0,7
+     * para protanopia: "Trabalho" e "Faculdade" eram a mesma cor para quem não
+     * distingue vermelho, e 13,4 até para visão normal — abaixo do piso de 15.
+     *
+     * Nesta, o pior par adjacente fica em ΔE 9,4 (deuteranopia) e 16,6 (visão
+     * normal), com a luminosidade dentro da faixa e contraste ≥ 3:1 contra o
+     * fundo escuro. Trocar uma cor aqui pede revalidar o conjunto: o que importa
+     * é a distância entre vizinhas, não a beleza de cada uma.
      */
     private static final String[][] PADRAO = {
-        {"trabalho", "Trabalho", "#4C8DFF",
+        {"trabalho", "Trabalho", "#3B82F6",
          "Código, reuniões e ferramentas do serviço."},
-        {"faculdade", "Faculdade", "#B37CFF",
-         "Aula, material de disciplina, entrega e prova da graduação."},
-        {"estudo", "Estudo", "#3DDC84",
+        {"estudo", "Estudo", "#0EA271",
          "Aula, tutorial ou documentação lida com intenção de aprender. Inclui vídeo de aula, "
          + "mas não vídeo de tecnologia visto por lazer."},
-        {"comunicacao", "Comunicação", "#F2B33D",
+        {"comunicacao", "Comunicação", "#D97706",
          "E-mail, mensagem e chamada, sem relação com uma tarefa específica."},
-        {"lazer", "Lazer", "#FF7A7A",
-         "Entretenimento: vídeo, música, jogo, rede social, leitura por prazer."}
+        {"lazer", "Lazer", "#E11D48",
+         "Entretenimento: vídeo, música, jogo, rede social, leitura por prazer."},
+        {"faculdade", "Faculdade", "#8B5CF6",
+         "Aula, material de disciplina, entrega e prova da graduação."}
     };
 
     private final CategoriaRepositorio categorias;

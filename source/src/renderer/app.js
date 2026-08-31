@@ -550,11 +550,7 @@ async function renderPanelMode() {
       <header class="topbar">
         <div class="topbar-row">
           <div class="logo"><span>Activity</span> Manager</div>
-          <div class="topbar-acoes">
-            <button class="panel-acao" id="panel-flip" title="Trocar o painel de lado">⇄</button>
-            <button class="panel-acao" id="panel-collapse" title="Recolher (Ctrl+Alt+P traz de volta)">‒</button>
-            <button class="panel-close" id="panel-close" title="Fechar">&times;</button>
-          </div>
+
         </div>
         <nav class="nav">
           <button data-screen="dashboard" class="${currentScreen === 'dashboard' ? 'active' : ''}">Atividades</button>
@@ -579,30 +575,6 @@ async function renderPanelMode() {
     });
   });
 
-  document.getElementById('panel-close').addEventListener('click', () => API.closePanelWindow());
-
-  // Trocar de lado é decisão que se toma OLHANDO a tela, não lendo formulário.
-  // Por isso é botão no cabeçalho e não campo em Configurações.
-  //
-  // `botao` guardado ANTES do await, e não `e.currentTarget` depois dele.
-  // `currentTarget` só existe enquanto o evento está sendo despachado: passado o
-  // primeiro await ele é null, o `finally` lança, e o botão fica desabilitado
-  // para sempre — com cara de "carregando" eterno. `e.target` sobreviveria, mas
-  // apontaria para o que foi clicado, que pode ser um filho.
-  document.getElementById('panel-flip').addEventListener('click', async (e) => {
-    const botao = e.currentTarget;
-    botao.disabled = true;
-    try {
-      const { panelSide } = await API.flipPanel();
-      toast(panelSide === 'left' ? 'Painel à esquerda' : 'Painel à direita');
-    } catch (err) {
-      toast(err.message);
-    } finally {
-      botao.disabled = false;
-    }
-  });
-
-  document.getElementById('panel-collapse').addEventListener('click', () => API.collapsePanel());
 
   renderScreen();
 }
@@ -1364,7 +1336,9 @@ async function renderAccountTab(body) {
   `;
 
   document.getElementById('btn-sync').addEventListener('click', async (ev) => {
-    const botao = ev.currentTarget;              // antes do await — veja panel-flip
+    // ANTES do await: `currentTarget` só existe durante o despacho do evento.
+    // Depois dele é null, o `finally` lança, e o botão trava em "carregando".
+    const botao = ev.currentTarget;
     botao.disabled = true;
     botao.textContent = 'Sincronizando…';
     try {
@@ -1477,7 +1451,9 @@ async function renderIaTab(body) {
     const chave = document.getElementById('ia-chave').value.trim();
     if (chave) patch.chaveIa = chave;
 
-    const botao = ev.currentTarget;              // antes do await — veja panel-flip
+    // ANTES do await: `currentTarget` só existe durante o despacho do evento.
+    // Depois dele é null, o `finally` lança, e o botão trava em "carregando".
+    const botao = ev.currentTarget;
     botao.disabled = true;
     try {
       await RastroAPI.configurar(patch);

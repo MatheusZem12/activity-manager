@@ -46,40 +46,29 @@ function ensurePanelWindow() {
   return panelWindow;
 }
 
-// Geometria calculada aqui além das window rules do Hyprland: um float sem
-// regra pode ignorar a geometria pedida, e ambientes que não são Hyprland
-// dependem só disto.
-function panelBounds() {
-  const { workArea } = screen.getPrimaryDisplay();
-  const width = 420;
-  const margin = 8;
-  // A lateral inteira. Era 90% da altura, e a sobra em cima e embaixo não
-  // servia para nada: `workArea` já exclui a waybar, então o painel encosta
-  // sem cobrir nada do sistema.
-  const height = workArea.height - margin * 2;
-  const side = configStore.getConfig().panelSide === 'left' ? 'left' : 'right';
-  const x = side === 'left'
-    ? workArea.x + margin
-    : workArea.x + workArea.width - width - margin;
-  const y = workArea.y + margin;
-  return { x, y, width, height };
-}
-
+/**
+ * A janela do app. Uma janela normal, e nada além disso.
+ *
+ * Foi um painel encostado na borda, sempre por cima, sem moldura e com posição
+ * imposta ao compositor. Custava caro: window rules que falham em silêncio, um
+ * dispatch para mover o que já estava na tela, e uma faixa cobrindo a borda do
+ * editor. Tudo isso para economizar um alt-tab.
+ *
+ * Como janela comum, o Hyprland cuida de posição, tamanho, foco e workspace —
+ * que é o que ele faz melhor que qualquer regra que a gente escrevesse. E a
+ * largura maior é o que permite dois painéis lado a lado e gráficos de verdade
+ * na aba Rastro.
+ */
 function createPanelWindow() {
-  const bounds = panelBounds();
-
   panelWindow = new BrowserWindow({
     title: PANEL_WINDOW_TITLE,
-    ...bounds,
-    minWidth: bounds.width,
-    minHeight: 400,
-    resizable: false,
-    minimizable: false,
-    maximizable: false,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    frame: false,
-    transparent: false,
+    width: 1100,
+    height: 720,
+    minWidth: 720,
+    minHeight: 480,
+    resizable: true,
+    minimizable: true,
+    maximizable: true,
     icon: APP_ICON_PATH,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -714,62 +703,6 @@ ipcMain.handle('window:showPanel', () => {
 
 // O botão × no cabeçalho do painel: mesma ideia do close() nativo — some para
 // a bandeja em vez de destruir a janela.
-/**
- * Vira o painel de lado.
- *
- * Era um campo na aba Geral, e estava no lugar errado: trocar de lado é algo que
- * se decide OLHANDO a tela, não lendo um formulário. Como botão no cabeçalho,
- * a resposta é imediata e a escolha se avalia sozinha.
- *
- * Continua persistido no config — vira preferência depois de decidida, não antes.
- */
-ipcMain.handle('panel:flip', async () => {
-  const atual = configStore.getConfig().panelSide === 'left' ? 'left' : 'right';
-  const novo = atual === 'left' ? 'right' : 'left';
-  configStore.saveConfig({ panelSide: novo });
-
-  // Ordem escolhida pelo que o usuário vê:
-  //
-  //   setBounds + dispatch   move a janela AGORA — é a resposta ao clique
-  //   syncShortcut           reescreve a windowrule, para a próxima vez que a
-  //                          janela nascer — e roda SEM bloquear o retorno
-  //
-  // A regra sozinha não bastaria (`windowrule = move` só vale na criação) e o
-  // dispatch sozinho também não (some no próximo start). Mas o `syncShortcut`
-  // reescreve a config do Hyprland e chama `hyprctl reload`: são segundos, e
-  // esperar por ele deixava o botão parecendo travado.
-  const destino = panelBounds();
-  if (panelWindow && !panelWindow.isDestroyed()) panelWindow.setBounds(destino);
-  if (hypr.isHyprland()) {
-    // `panelBounds()` já calculou o pixel a partir da área útil do monitor —
-    // que é o que o dispatcher aceita. Expressão ali falha em silêncio.
-    await hypr.moveWindow(PANEL_WINDOW_TITLE, destino).catch((e) => {
-      console.warn('[painel] não consegui mover:', e.message);
-    });
-  }
-
-  syncShortcut().catch((e) => console.warn('[painel] regra não reescrita:', e.message));
-
-  sendToPanel('config:updated', configStore.getConfig());
-  return { panelSide: novo };
-});
-
-/**
- * Recolhe o painel.
- *
- * Recolher é esconder, e não virar um trilho na borda. Um trilho sempre visível
- * exigiria `layer-shell` para RESERVAR espaço — o protocolo que a waybar usa e
- * que o Electron não fala. Sem ele, a faixa ficaria por CIMA da borda do que
- * estivesse embaixo, cobrindo o editor o dia inteiro para economizar um atalho.
- *
- * Escondido, o painel volta pelo `Ctrl+Alt+P` ou pela bandeja — e o coletor
- * continua registrando, porque ele nunca dependeu da janela estar aberta.
- */
-ipcMain.handle('panel:collapse', () => {
-  if (panelWindow && !panelWindow.isDestroyed()) panelWindow.hide();
-  return { recolhido: true };
-});
-
 ipcMain.handle('panel:close', () => {
   if (panelWindow && !panelWindow.isDestroyed()) {
     panelWindow.close();

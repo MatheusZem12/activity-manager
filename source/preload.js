@@ -29,8 +29,6 @@ contextBridge.exposeInMainWorld('activityAPI', {
   testSound: (volume) => ipcRenderer.invoke('sound:test', volume),
   showPanelWindow: () => ipcRenderer.invoke('window:showPanel'),
   closePanelWindow: () => ipcRenderer.invoke('panel:close'),
-  flipPanel: () => ipcRenderer.invoke('panel:flip'),
-  collapsePanel: () => ipcRenderer.invoke('panel:collapse'),
   getShortcutStatus: () => ipcRenderer.invoke('shortcut:status'),
   checkShortcutConflict: (accelerator) => ipcRenderer.invoke('shortcut:conflict', accelerator),
 
@@ -63,6 +61,7 @@ contextBridge.exposeInMainWorld('RastroAPI', {
   estado: () => ipcRenderer.invoke('rastro:estado'),
   local: (data) => ipcRenderer.invoke('rastro:local', data),
   relatorio: (de, ate) => ipcRenderer.invoke('rastro:relatorio', { de, ate }),
+  serie: (de, ate) => ipcRenderer.invoke('rastro:serie', { de, ate }),
   categorias: () => ipcRenderer.invoke('rastro:categorias'),
   regras: () => ipcRenderer.invoke('rastro:regras'),
   salvarCategoria: (id, dados) => ipcRenderer.invoke('rastro:salvarCategoria', { id, dados }),
