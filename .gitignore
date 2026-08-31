@@ -1,2 +1,19 @@
+# ---- app de desktop ----
 source/node_modules/
 source/package-lock.json
+
+# ---- backend ----
+# O `target/` é saída do Maven: jar, classes e relatórios. Nada dali é fonte, e
+# o `.jar` sozinho passa de 50 MB.
+backend/target/
+
+# ---- segredos ----
+# O `.env` tem o segredo do JWT, o convite e a senha do banco. O `.env.exemplo`
+# é o que vai versionado, sem valor nenhum preenchido.
+.env
+.env.local
+deploy/vps/**/.env
+
+# ---- ruído local ----
+*.log
+.DS_Store
