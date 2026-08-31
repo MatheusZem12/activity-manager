@@ -122,7 +122,10 @@ async function importAll(data) {
     tags: a.tags || [],
     alertaMin: a.reminderMinutes || 30,
     venceEm: a.dueAt ? new Date(a.dueAt).toISOString() : null,
-    criadaEm: new Date(a.createdAt || Date.now()).toISOString()
+    criadaEm: new Date(a.createdAt || Date.now()).toISOString(),
+    // Sem isto o estado se perde e tudo volta como pendente: uma lista de
+    // "coisas a fazer" que reaparece cheia de coisas já feitas.
+    concluidaEm: a.completedAt ? new Date(a.completedAt).toISOString() : null
   }));
   const r = await api.pedir('/atividades/importar', { metodo: 'POST', corpo: lote });
   await carregar();

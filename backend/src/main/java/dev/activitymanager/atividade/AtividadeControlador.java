@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.*;
 public class AtividadeControlador {
 
     public record Entrada(String texto, List<String> tags, Integer alertaMin,
-                          Instant venceEm, Instant criadaEm) {}
+                          Instant venceEm, Instant criadaEm, Instant concluidaEm) {}
 
     public record Saida(Long id, String texto, List<String> tags, Integer alertaMin,
                         Instant venceEm, Instant criadaEm, Instant concluidaEm) {
@@ -57,8 +57,16 @@ public class AtividadeControlador {
         a.setUsuarioId(Conta.id());
         a.setCriadaEm(entrada.criadaEm() != null ? entrada.criadaEm() : Instant.now());
         aplicar(a, entrada);
-        // Sem vencimento explícito, o alerta é daqui a `alertaMin` minutos.
-        if (a.getVenceEm() == null && a.getAlertaMin() != null) {
+
+        // Importação traz o estado junto: uma atividade que já estava concluída
+        // não pode voltar para a lista de pendentes só por mudar de banco.
+        if (entrada.concluidaEm() != null) a.setConcluidaEm(entrada.concluidaEm());
+
+        // Concluída não alerta. Sem vencimento explícito, o alerta é daqui a
+        // `alertaMin` minutos.
+        if (a.getConcluidaEm() != null) {
+            a.setVenceEm(null);
+        } else if (a.getVenceEm() == null && a.getAlertaMin() != null) {
             a.setVenceEm(a.getCriadaEm().plus(a.getAlertaMin(), ChronoUnit.MINUTES));
         }
         return Saida.de(atividades.save(a));
