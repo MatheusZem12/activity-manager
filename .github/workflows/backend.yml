@@ -16,7 +16,13 @@ on:
   workflow_dispatch:
 
 env:
-  IMAGEM: ghcr.io/${{ github.repository_owner }}/activity-manager-backend
+  # Literal, e minúsculo. `github.repository_owner` devolve `MatheusZem12` com
+  # maiúsculas, e o GHCR recusa: "repository name must be lowercase".
+  #
+  # Escrito à mão também garante que bate com o nome que o
+  # deploy/vps/service/docker-compose.yml usa no `image:`. Se os dois
+  # divergissem, o build passaria e a VPS puxaria um nome que nunca existiu.
+  IMAGEM: ghcr.io/matheuszem12/activity-manager-backend
 
 jobs:
   publicar:
