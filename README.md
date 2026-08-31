@@ -11,6 +11,35 @@ O app não tem uma janela "normal": ele vive na bandeja e some/aparece como um p
 
 > **Não monitora o clipboard do sistema.** Só existem textos criados manualmente por você.
 
+## Rastro — para onde foi o seu dia
+
+Uma terceira coisa, em construção: o app escuta o socket de eventos do Hyprland
+e anota, sozinho, qual janela esteve na sua frente e por quanto tempo. Sem você
+apertar começar nem parar.
+
+O que ele grava são **fatos** — classe da janela, título, tela travada, mídia
+tocando. O que aquilo *significa* (ocioso? estudo? qual projeto?) é derivado no
+backend. A separação tem um motivo prático: regra no servidor pode ser reaplicada
+ao histórico inteiro quando você muda de ideia; regra assada no coletor condena
+todo dado já coletado.
+
+```bash
+./coletar.sh     # roda só o coletor, fora do Electron
+```
+
+Grava em `~/.local/share/activity-manager/rastro/AAAA-MM-DD.jsonl`. Funciona
+sozinho, sem servidor. Configure `servidor.json` nesse mesmo diretório para
+sincronizar com o backend e juntar mais de uma máquina na mesma conta.
+
+**Ocioso não é "sem teclas".** Assistir uma aula de quarenta minutos gera zero
+input, e é justamente o tempo que mais interessa medir. O sinal usado é
+`(tela travada ou protetor de tela) E NÃO (mídia tocando)` — observado de fora,
+sem editar nenhum arquivo de configuração do Hyprland.
+
+**A classificação tem quatro degraus**, do mais barato ao mais caro: ociosidade,
+regras suas, cache, e só então IA. O provedor de IA é escolha de cada máquina —
+`claude` da máquina, `ollama` local, ou uma chave de API no servidor.
+
 > Este app absorveu o antigo projeto `clipboard-manager`, que era um serviço separado. Um serviço só, uma bandeja só, um arquivo de config do Hyprland só.
 
 ## Tecnologias
