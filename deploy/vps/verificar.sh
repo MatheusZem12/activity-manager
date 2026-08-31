@@ -18,6 +18,15 @@ falha() { printf '  \033[1;31m✗\033[0m %s\n' "$*"; }
 dica()  { printf '\n    \033[1;33m→\033[0m %s\n\n' "$*"; }
 passo() { printf '\033[1;34m%s\033[0m\n' "$*"; }
 
+# `docker inspect` num container inexistente escreve uma linha VAZIA no stdout
+# antes de errar. Sem limpar, `estado` vira "\nausente" e nao casa com
+# "ausente" — o script cai no ramo errado e sugere o conserto errado.
+saude() {
+  local valor
+  valor="$(docker inspect -f '{{.State.Health.Status}}' "$1" 2>/dev/null | tr -d '[:space:]')"
+  printf '%s' "${valor:-ausente}"
+}
+
 # --------------------------------------------------------------------- 1. rede
 passo "1. Rede"
 if docker network inspect activity-net >/dev/null 2>&1; then
@@ -30,7 +39,7 @@ fi
 
 # -------------------------------------------------------------------- 2. banco
 passo "2. Banco"
-estado="$(docker inspect -f '{{.State.Health.Status}}' postgres_activity 2>/dev/null || echo ausente)"
+estado="$(saude postgres_activity)"
 case "${estado}" in
   healthy)  ok "postgres_activity saudável" ;;
   ausente)  falha "postgres_activity não existe"
@@ -67,10 +76,15 @@ fi
 
 # ------------------------------------------------------------------ 4. serviço
 passo "4. Serviço"
-estado="$(docker inspect -f '{{.State.Health.Status}}' activity-backend 2>/dev/null || echo ausente)"
+estado="$(saude activity-backend)"
 if [[ "${estado}" == "ausente" ]]; then
   falha "activity-backend não existe"
   dica "cd ${RAIZ}/service && docker compose up -d"
+  exit 1
+fi
+if [[ "${estado}" == "starting" ]]; then
+  falha "activity-backend ainda subindo"
+  dica "espere ~40s (start_period do healthcheck) e rode de novo"
   exit 1
 fi
 if [[ "${estado}" != "healthy" ]]; then
@@ -78,7 +92,7 @@ if [[ "${estado}" != "healthy" ]]; then
   echo
   echo "    Últimas linhas do log:"
   docker logs --tail 15 activity-backend 2>&1 | sed 's/^/      /'
-  dica "erro comum: senha do banco diferente entre os dois .env"
+  dica "erro comum: AM_DB_SENHA do service/.env diferente do POSTGRES_PASSWORD do postgres/.env"
   exit 1
 fi
 ok "activity-backend saudável"
