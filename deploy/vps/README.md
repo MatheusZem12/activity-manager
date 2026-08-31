@@ -119,43 +119,25 @@ expõe o serviço na internet.
 
 ## Watchtower: o deploy é o push
 
-Esta VPS já roda um Watchtower (do compose do finance), e é ele que faz o
-deploy. Não há um segundo aqui de propósito: seriam dois processos disputando o
-mesmo `/var/run/docker.sock`, e ambos usam `container_name: watchtower` — o
-segundo `up` falharia por nome já em uso.
+Esta VPS já roda um Watchtower (do compose do finance), com
+`WATCHTOWER_LABEL_ENABLE: false` — ele vigia **todos** os contêineres da
+máquina. Não há um segundo aqui, pelo mesmo motivo do lingua: seriam dois
+processos disputando o mesmo `/var/run/docker.sock`, e ambos usam
+`container_name: watchtower`.
 
-O ciclo completo, depois da primeira instalação:
+O ciclo, depois da primeira instalação:
 
 ```
 git push  ─>  Actions constrói  ─>  GHCR :dev  ─>  Watchtower puxa  ─>  recria
 ```
 
-Nada a fazer na VPS. Quem decide o que ele atualiza são os rótulos:
+Nada a fazer na VPS.
 
-| contêiner | rótulo | por quê |
-|---|---|---|
-| `activity-backend` | `enable=true` | é o deploy inteiro |
-| `activity-tunel` | `enable=true` | `latest` sem atualização envelhece calado, e é proxy sem estado |
-| `postgres_activity` | `enable=false` | veja abaixo |
-
-**O banco fica de fora de propósito.** `postgres:16` só recebe correção de
-patch, então a atualização em si é segura — o que não é seguro é o *momento*.
-Recriar o contêiner reinicia o banco, e um reinício no meio de uma escrita é
-exatamente o que não se quer acontecendo sozinho às três da manhã. Atualizar
-vira decisão consciente:
-
-```bash
-cd ~/activity-manager/postgres && docker compose pull && docker compose up -d
-```
-
-O rótulo explícito funciona nos dois modos do Watchtower: com
-`WATCHTOWER_LABEL_ENABLE=false` (vigia tudo) ele é redundante; com `true`
-(vigia só quem pede) é obrigatório. Sem saber o modo, pôr o rótulo é a escolha
-que não quebra em nenhum dos dois. Para conferir o modo:
-
-```bash
-docker inspect watchtower --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -i label
-```
+Como ele vigia tudo, o `postgres:16` também é atualizado quando sai um patch —
+mesma situação do lingua. Patch de Postgres não quebra compatibilidade; o que
+custa é o reinício do contêiner. Se um dia isso incomodar, o rótulo
+`com.centurylinklabs.watchtower.enable: "false"` no serviço `db` tira o banco
+da lista.
 
 ## Portas nesta VPS
 

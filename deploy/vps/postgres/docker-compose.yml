@@ -1,44 +1,29 @@
-# O banco, sozinho no seu compose.
-#
-# Separado do serviço de propósito: atualizar a imagem do backend não pode ter
-# nada a ver com derrubar o Postgres. São ciclos de vida diferentes — um muda
-# a cada push, o outro quase nunca.
 services:
   db:
     image: postgres:16
     container_name: postgres_activity
     restart: always
-    labels:
-      # DE FORA do Watchtower, de propósito.
-      #
-      # `postgres:16` só recebe correção de patch, então a atualização em si é
-      # segura — o que não é seguro é o **momento**. Recriar o contêiner reinicia
-      # o banco, e um reinício no meio de uma escrita é exatamente o que não se
-      # quer acontecendo sozinho às três da manhã.
-      #
-      # Atualizar é uma decisão consciente:
-      #     cd ~/activity-manager/postgres && docker compose pull && docker compose up -d
-      com.centurylinklabs.watchtower.enable: "false"
     environment:
-      POSTGRES_USER: ${AM_DB_USER:-activity}
-      POSTGRES_PASSWORD: ${AM_DB_SENHA:?defina AM_DB_SENHA no .env}
-      POSTGRES_DB: ${AM_DB_NOME:-activity_manager}
+      POSTGRES_USER: activity
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: activity_manager
     ports:
-      # 127.0.0.1 e não 0.0.0.0: o banco só ouve a própria VPS. Quem varre a
-      # internet procurando Postgres exposto não tem o que achar aqui.
-      #
-      # 5434 porque a 5432 já é do finance e a 5433 do lingua nesta máquina.
-      - "127.0.0.1:${AM_DB_PORTA:-5434}:5432"
-    # Segmento de foco é linha curta e numérica: um ano de uso não chega perto
-    # de encher isto. Serve para limitar crescimento, não para apertar.
+      # Bloqueio de seguranca: o banco so ouve a propria VPS (127.0.0.1)
+      # 5434 e nao 5432: a 5432 e do postgres_finance e a 5433 do postgres_lingua
+      - "127.0.0.1:5434:5432"
+    # Segmento de foco e linha curta e numerica -- um ano de uso nao chega perto
+    # de encher isto. Serve para limitar crescimento, nao para apertar.
     mem_limit: 512m
+    # Sem isto o log json-file cresce para sempre e enche o disco.
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
+    # O passo a passo manda esperar o banco ficar `healthy` antes de subir o
+    # app. Sem healthcheck, "esperar" vira "contar ate dez".
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${AM_DB_USER:-activity} -d ${AM_DB_NOME:-activity_manager}"]
+      test: ["CMD-SHELL", "pg_isready -U activity -d activity_manager"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -50,8 +35,6 @@ services:
 volumes:
   postgres_data:
 
-# Externa: criada uma vez com `docker network create activity-net`, fora dos
-# dois composes. Assim nenhum deles cria nem destrói a rede do outro.
 networks:
   activity-net:
     external: true
