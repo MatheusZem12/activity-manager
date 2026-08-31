@@ -251,7 +251,13 @@ services:
     profiles: [tunel]
     command: tunnel --no-autoupdate run
     environment:
-      TUNNEL_TOKEN: ${AM_TUNEL_TOKEN:?defina AM_TUNEL_TOKEN no .env}
+      # `:-` e nao `:?`. A forma com `:?` parece melhor -- ela recusa subir sem
+      # token -- mas o Compose interpola o arquivo INTEIRO antes de filtrar por
+      # profile, entao ela quebrava `docker compose up -d` sem o perfil `tunel`,
+      # com o backend nem tendo relacao com isso.
+      #
+      # Sem token o cloudflared falha ao iniciar, e a falha fica contida nele.
+      TUNNEL_TOKEN: ${AM_TUNEL_TOKEN:-}
     mem_limit: 128m
     depends_on:
       - activity-backend
