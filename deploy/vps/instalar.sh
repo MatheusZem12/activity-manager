@@ -151,6 +151,17 @@ services:
     image: postgres:16
     container_name: postgres_activity
     restart: always
+    labels:
+      # DE FORA do Watchtower, de propósito.
+      #
+      # `postgres:16` só recebe correção de patch, então a atualização em si é
+      # segura — o que não é seguro é o **momento**. Recriar o contêiner reinicia
+      # o banco, e um reinício no meio de uma escrita é exatamente o que não se
+      # quer acontecendo sozinho às três da manhã.
+      #
+      # Atualizar é uma decisão consciente:
+      #     cd ~/activity-manager/postgres && docker compose pull && docker compose up -d
+      com.centurylinklabs.watchtower.enable: "false"
     environment:
       POSTGRES_USER: ${AM_DB_USER:-activity}
       POSTGRES_PASSWORD: ${AM_DB_SENHA:?defina AM_DB_SENHA no .env}
@@ -197,6 +208,15 @@ services:
     image: ghcr.io/matheuszem12/activity-manager-backend:${AM_TAG:-dev}
     container_name: activity-backend
     restart: unless-stopped
+    labels:
+      # O Watchtower desta VPS é quem atualiza este contêiner: push no branch
+      # publica a imagem, ele puxa e recria. É o deploy inteiro.
+      #
+      # O rótulo explícito funciona nos dois modos: se o Watchtower estiver com
+      # WATCHTOWER_LABEL_ENABLE=false (vigia tudo), ele é redundante; se estiver
+      # com true (vigia só quem pede), ele é obrigatório. Sem saber o modo, pôr
+      # o rótulo é a escolha que não quebra em nenhum dos dois.
+      com.centurylinklabs.watchtower.enable: "true"
     ports:
       # Loopback: nada daqui é alcançável de fora sem o túnel. 8091 porque a
       # 8080 é do finance e a 8090 do lingua nesta máquina.
@@ -254,6 +274,10 @@ services:
     container_name: activity-tunel
     restart: unless-stopped
     profiles: [tunel]
+    labels:
+      # `latest` sem atualização automática envelhece calado. O cloudflared é um
+      # proxy sem estado: recriar não custa nada.
+      com.centurylinklabs.watchtower.enable: "true"
     command: tunnel --no-autoupdate run
     environment:
       TUNNEL_TOKEN: ${AM_TUNEL_TOKEN:?defina AM_TUNEL_TOKEN no .env}
