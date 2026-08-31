@@ -19,11 +19,12 @@ const Rastro = (() => {
   let erro = null;
   let ocupado = false;
 
+  // Conta e IA saíram daqui para Configurações: são configuração, e o Rastro é
+  // sobre o seu dia. O que fica é o que se OLHA, não o que se ajusta.
   const SUB_ABAS = [
     { chave: 'hoje', rotulo: 'Hoje' },
     { chave: 'categorias', rotulo: 'Categorias' },
-    { chave: 'regras', rotulo: 'Regras' },
-    { chave: 'conta', rotulo: 'Conta' }
+    { chave: 'regras', rotulo: 'Regras' }
   ];
 
   function duracao(segundos) {
@@ -92,9 +93,8 @@ const Rastro = (() => {
       const total = local ? local.segundos : 0;
       return `
         <div class="rastro-aviso">
-          <strong>Só local.</strong> Sem servidor configurado, o Rastro grava mas não
-          classifica — categoria, projeto e ociosidade são decididos no backend.
-          Configure em <b>Conta</b>.
+          <strong>Só local.</strong> Sem sessão, o Rastro grava mas não classifica —
+          categoria, projeto e ociosidade são decididos no servidor.
         </div>
         <h3 class="rastro-titulo">Tempo por aplicativo — hoje</h3>
         <p class="rastro-resumo">${local ? local.segmentos : 0} segmentos · ${duracao(total)}</p>
@@ -187,70 +187,6 @@ const Rastro = (() => {
     return '<div class="rastro-aviso">Sem sessão. Reabra o painel para entrar.</div>';
   }
 
-  function telaConta() {
-    const execs = estado.executores.length
-      ? estado.executores.map((e) => `<code>${esc(e)}</code>`).join(' ')
-      : '<i>nenhum detectado</i>';
-    const modelos = estado.modelosOllama.map((m) => `<option value="${esc(m)}">`).join('');
-
-    return `
-      <h3 class="rastro-titulo">Conta</h3>
-      <div class="rastro-form">
-        <div class="form-hint">
-          Conectado a <b>${esc(estado.servidor.replace(/^https?:\/\//, ''))}</b><br>
-          Este dispositivo: <b>${esc(estado.dispositivo)}</b>
-        </div>
-        <button id="conta-sair">Sair desta máquina</button>
-        <div class="form-hint">
-          Sair apaga só a sessão. Os segmentos já gravados continuam no disco e
-          sobem quando você entrar de novo.
-        </div>
-      </div>
-
-      <h3 class="rastro-titulo">IA nesta máquina</h3>
-      <div class="rastro-form">
-        <div class="form-hint">
-          O servidor não fala com modelo nenhum — ele monta a pergunta e espera.
-          Quem executa é esta máquina, com o que ela tiver.<br>
-          Detectado aqui: ${execs}
-        </div>
-
-        <label>Como classificar</label>
-        <select id="conta-provedor">
-          <option value="" ${!estado.provedorIa ? 'selected' : ''}>Usar o que houver nesta máquina</option>
-          <option value="claudecode" ${estado.provedorIa === 'claudecode' ? 'selected' : ''}>Claude Code (sem chave, usa sua assinatura)</option>
-          <option value="ollama" ${estado.provedorIa === 'ollama' ? 'selected' : ''}>Ollama (local, o título não sai da máquina)</option>
-          <option value="anthropic" ${estado.provedorIa === 'anthropic' ? 'selected' : ''}>Anthropic (chave)</option>
-          <option value="openai" ${estado.provedorIa === 'openai' ? 'selected' : ''}>OpenAI (chave)</option>
-          <option value="gemini" ${estado.provedorIa === 'gemini' ? 'selected' : ''}>Gemini (chave)</option>
-        </select>
-
-        <label>Chave de API <span class="form-hint">só para os três de cima</span></label>
-        <input id="conta-chave" type="password"
-               placeholder="${estado.temChave ? 'já guardada — digite para trocar' : 'nenhuma'}">
-
-        <label>Modelo <span class="form-hint">em branco usa o padrão</span></label>
-        ${modelos
-          ? `<input id="conta-modelo" list="modelos-ollama" value="${esc(estado.modeloIa)}">
-             <datalist id="modelos-ollama">${modelos}</datalist>`
-          : `<input id="conta-modelo" value="${esc(estado.modeloIa)}">`}
-
-        <button id="conta-salvar">Salvar</button>
-        <div class="form-hint">
-          A chave fica <b>só nesta máquina</b>, nunca sobe para o servidor.
-        </div>
-      </div>
-
-      <h3 class="rastro-titulo">Sincronização</h3>
-      <div class="rastro-form">
-        <button id="conta-sync" ${estado.temToken ? '' : 'disabled'}>Sincronizar agora</button>
-        <div class="form-hint">
-          ${estado.ultimaSync ? `Última: ${new Date(estado.ultimaSync).toLocaleTimeString('pt-BR')}` : 'Automático a cada 5 minutos.'}
-          ${estado.ultimoErro ? `<br><span class="rastro-erro">${esc(estado.ultimoErro)}</span>` : ''}
-        </div>
-      </div>`;
-  }
-
   // ------------------------------------------------------------------ render
 
   async function render(container, aoTerminar) {
@@ -259,10 +195,9 @@ const Rastro = (() => {
       await carregar();
     }
 
-    const corpo = subAba === 'hoje' ? telaHoje()
-      : subAba === 'categorias' ? telaCategorias()
+    const corpo = subAba === 'categorias' ? telaCategorias()
       : subAba === 'regras' ? telaRegras()
-      : telaConta();
+      : telaHoje();
 
     container.innerHTML = `
       <div class="rastro">
@@ -305,23 +240,6 @@ const Rastro = (() => {
       const el = container.querySelector(`#${id}`);
       return el ? el.value.trim() : '';
     };
-
-    clique('conta-sair', async () => {
-      await RastroAPI.sair();
-      window.location.reload();
-    });
-
-    clique('conta-salvar', async () => {
-      const patch = {
-        provedorIa: valor('conta-provedor'),
-        modeloIa: valor('conta-modelo')
-      };
-      // Campo em branco quer dizer "não mexi na chave", não "apague a chave".
-      const chave = valor('conta-chave');
-      if (chave) patch.chaveIa = chave;
-      await RastroAPI.configurar(patch);
-      await recarregar(container, aoTerminar);
-    });
 
     clique('conta-sync', async () => {
       try {

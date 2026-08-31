@@ -18,9 +18,6 @@ contextBridge.exposeInMainWorld('activityAPI', {
 
   saveConfig: (patch) => ipcRenderer.invoke('config:save', patch),
 
-  exportBackup: () => ipcRenderer.invoke('backup:export'),
-  importBackup: () => ipcRenderer.invoke('backup:import'),
-
   closeQuickWindow: () => ipcRenderer.invoke('quick:close'),
   openQuickWindow: () => ipcRenderer.invoke('quick:open'),
   setQuickDraft: (hasDraft) => ipcRenderer.invoke('quick:draft', hasDraft),
@@ -32,6 +29,7 @@ contextBridge.exposeInMainWorld('activityAPI', {
   testSound: (volume) => ipcRenderer.invoke('sound:test', volume),
   showPanelWindow: () => ipcRenderer.invoke('window:showPanel'),
   closePanelWindow: () => ipcRenderer.invoke('panel:close'),
+  flipPanel: () => ipcRenderer.invoke('panel:flip'),
   getShortcutStatus: () => ipcRenderer.invoke('shortcut:status'),
   checkShortcutConflict: (accelerator) => ipcRenderer.invoke('shortcut:conflict', accelerator),
 

@@ -550,7 +550,10 @@ async function renderPanelMode() {
       <header class="topbar">
         <div class="topbar-row">
           <div class="logo"><span>Activity</span> Manager</div>
-          <button class="panel-close" id="panel-close" title="Fechar">&times;</button>
+          <div class="topbar-acoes">
+            <button class="panel-acao" id="panel-flip" title="Trocar o painel de lado">⇄</button>
+            <button class="panel-close" id="panel-close" title="Fechar">&times;</button>
+          </div>
         </div>
         <nav class="nav">
           <button data-screen="dashboard" class="${currentScreen === 'dashboard' ? 'active' : ''}">Atividades</button>
@@ -576,6 +579,18 @@ async function renderPanelMode() {
   });
 
   document.getElementById('panel-close').addEventListener('click', () => API.closePanelWindow());
+
+  // Trocar de lado é decisão que se toma OLHANDO a tela, não lendo formulário.
+  // Por isso é botão no cabeçalho e não campo em Configurações.
+  document.getElementById('panel-flip').addEventListener('click', async (e) => {
+    e.currentTarget.disabled = true;
+    try {
+      const { panelSide } = await API.flipPanel();
+      toast(panelSide === 'left' ? 'Painel à esquerda' : 'Painel à direita');
+    } finally {
+      e.currentTarget.disabled = false;
+    }
+  });
 
   renderScreen();
 }
@@ -1146,11 +1161,15 @@ function wireEntryEditInputs() {
 
 // ---------- Configurações ----------
 
+// Conta e IA vieram da aba Rastro: são configuração, e configuração mora em
+// Configurações. Notificações e Volume viraram uma só — as duas falavam do
+// mesmo alerta, e separar obrigava a ir e voltar para ajustar uma coisa.
 const SETTINGS_TABS = [
   { key: 'geral', label: 'Geral' },
+  { key: 'conta', label: 'Conta' },
+  { key: 'ia', label: 'IA' },
   { key: 'atalhos', label: 'Atalhos' },
-  { key: 'notificacoes', label: 'Notificações' },
-  { key: 'volume', label: 'Volume' }
+  { key: 'alertas', label: 'Alertas' }
 ];
 
 /**
@@ -1168,7 +1187,7 @@ function renderSettings(container) {
       ${SETTINGS_TABS.map((t) => `<button data-tab="${t.key}" class="${settingsTab === t.key ? 'active' : ''}">${t.label}</button>`).join('')}
     </div>
     <div class="settings-form" id="settings-tab-body"></div>
-    <div class="settings-actions settings-footer">
+    <div class="settings-actions settings-footer" id="settings-footer">
       <button class="btn btn-primary" id="btn-save-cfg">Salvar configurações</button>
     </div>
   `;
@@ -1182,9 +1201,17 @@ function renderSettings(container) {
 
   const body = document.getElementById('settings-tab-body');
   if (settingsTab === 'geral') renderGeneralTab(body);
+  else if (settingsTab === 'conta') renderAccountTab(body);
+  else if (settingsTab === 'ia') renderIaTab(body);
   else if (settingsTab === 'atalhos') renderShortcutsTab(body);
-  else if (settingsTab === 'notificacoes') renderNotificationsTab(body);
-  else if (settingsTab === 'volume') renderVolumeTab(body);
+  else if (settingsTab === 'alertas') renderAlertsTab(body);
+
+  // Conta e IA salvam sozinhas, cada ação no seu botão. Um "Salvar
+  // configurações" no rodapé delas não faria nada — e botão que não faz nada
+  // ensina a desconfiar dos que fazem.
+  const RASCUNHO = ['geral', 'atalhos', 'alertas'];
+  document.getElementById('settings-footer').classList
+    .toggle('oculto', !RASCUNHO.includes(settingsTab));
 
   document.getElementById('btn-save-cfg').addEventListener('click', async () => {
     const saveBtn = document.getElementById('btn-save-cfg');
@@ -1195,7 +1222,6 @@ function renderSettings(container) {
       globalShortcut: (settingsDraft.globalShortcut || '').trim() || 'Ctrl+Alt+A',
       globalShortcutClip: (settingsDraft.globalShortcutClip || '').trim() || 'Ctrl+Alt+C',
       globalShortcutPanel: (settingsDraft.globalShortcutPanel || '').trim() || 'Ctrl+Alt+P',
-      panelSide: settingsDraft.panelSide,
       startOnLogin: !!settingsDraft.startOnLogin,
       soundEnabled: !!settingsDraft.soundEnabled,
       soundVolume: parseInt(settingsDraft.soundVolume, 10)
@@ -1216,47 +1242,62 @@ function renderSettings(container) {
   });
 }
 
+/**
+ * A aba Geral.
+ *
+ * Agrupada por assunto e não por campo solto: "Atividades" e "Clipboard" são as
+ * duas coisas que se configura aqui, e cada uma tem os seus números. O que saiu
+ * daqui saiu por bons motivos — o lado do painel virou botão no cabeçalho
+ * (decisão que se toma olhando, não lendo), e o backup sumiu porque os dados
+ * moram num banco com conta e sincronização.
+ */
 function renderGeneralTab(body) {
   body.innerHTML = `
-    <div class="form-group">
-      <label>Tempo padrão do alerta (minutos)</label>
-      <input type="number" id="cfg-default-minutes" min="1" value="${settingsDraft.defaultReminderMinutes}">
-      <div class="form-hint">Usado quando você não digitar !N na atividade.</div>
-    </div>
+    <div class="cfg-secao">
+      <h4 class="cfg-titulo">Atividades</h4>
 
-    <div class="form-group">
-      <label>Limite máximo de caracteres</label>
-      <input type="number" id="cfg-max-length" min="10" value="${settingsDraft.maxTextLength}">
-      <div class="form-hint">Tamanho máximo do texto de uma atividade.</div>
-    </div>
-
-    <div class="form-group">
-      <label>Limite de caracteres do título (clipboard)</label>
-      <input type="number" id="cfg-max-title" min="10" value="${settingsDraft.maxTitleLength}">
-      <div class="form-hint">O conteúdo de um texto não tem limite — só o título.</div>
-    </div>
-
-    <div class="form-group">
-      <label>Lado do painel</label>
-      <select id="cfg-panel-side">
-        <option value="right" ${settingsDraft.panelSide !== 'left' ? 'selected' : ''}>Direita</option>
-        <option value="left" ${settingsDraft.panelSide === 'left' ? 'selected' : ''}>Esquerda</option>
-      </select>
-      <div class="form-hint">Em qual borda da tela este painel encosta.</div>
-    </div>
-
-    <div class="form-group checkbox-row">
-      <input type="checkbox" id="cfg-autostart" ${settingsDraft.startOnLogin ? 'checked' : ''}>
-      <label for="cfg-autostart">Iniciar junto com o sistema</label>
-    </div>
-
-    <div class="form-group">
-      <label>Backup</label>
-      <div class="settings-actions">
-        <button class="btn btn-secondary" id="btn-export">Exportar backup</button>
-        <button class="btn btn-secondary" id="btn-import">Importar backup</button>
+      <div class="form-group">
+        <label>Tempo padrão do alerta</label>
+        <div class="cfg-numero">
+          <input type="number" id="cfg-default-minutes" min="1" value="${settingsDraft.defaultReminderMinutes}">
+          <span>minutos</span>
+        </div>
+        <div class="form-hint">Vale quando você não escreve <code>!N</code> na atividade.</div>
       </div>
-      <div class="form-hint">Um único JSON com atividades e textos do clipboard.</div>
+
+      <div class="form-group">
+        <label>Limite do texto</label>
+        <div class="cfg-numero">
+          <input type="number" id="cfg-max-length" min="10" value="${settingsDraft.maxTextLength}">
+          <span>caracteres</span>
+        </div>
+        <div class="form-hint">Segura a atividade curta o bastante para caber num alerta.</div>
+      </div>
+    </div>
+
+    <div class="cfg-secao">
+      <h4 class="cfg-titulo">Clipboard</h4>
+
+      <div class="form-group">
+        <label>Limite do título</label>
+        <div class="cfg-numero">
+          <input type="number" id="cfg-max-title" min="10" value="${settingsDraft.maxTitleLength}">
+          <span>caracteres</span>
+        </div>
+        <div class="form-hint">Só o título. O conteúdo não tem limite — é o que vai ser colado.</div>
+      </div>
+    </div>
+
+    <div class="cfg-secao">
+      <h4 class="cfg-titulo">Sistema</h4>
+
+      <label class="cfg-chave">
+        <input type="checkbox" id="cfg-autostart" ${settingsDraft.startOnLogin ? 'checked' : ''}>
+        <span>
+          Iniciar junto com o sistema
+          <em>O coletor só registra o seu dia se o app estiver rodando.</em>
+        </span>
+      </label>
     </div>
   `;
 
@@ -1269,26 +1310,164 @@ function renderGeneralTab(body) {
   document.getElementById('cfg-max-title').addEventListener('input', (e) => {
     settingsDraft.maxTitleLength = e.target.value;
   });
-  document.getElementById('cfg-panel-side').addEventListener('change', (e) => {
-    settingsDraft.panelSide = e.target.value;
-  });
   document.getElementById('cfg-autostart').addEventListener('change', (e) => {
     settingsDraft.startOnLogin = e.target.checked;
   });
 
-  document.getElementById('btn-export').addEventListener('click', async () => {
-    const filePath = await API.exportBackup();
-    if (filePath) toast(`Backup salvo em ${filePath}`);
+}
+
+/**
+ * A conta: com quem este app está falando, e como sair.
+ *
+ * Não há campo de servidor. O endereço é constante — ele não é preferência do
+ * usuário, é onde o app vive, e campo editável só criava uma forma de digitar
+ * errado e ficar sem sincronizar sem saber por quê.
+ */
+async function renderAccountTab(body) {
+  body.innerHTML = '<p class="empty-hint">Carregando…</p>';
+  const e = await RastroAPI.estado();
+
+  body.innerHTML = `
+    <div class="cfg-secao">
+      <h4 class="cfg-titulo">Conectado</h4>
+      <div class="cfg-par"><span>Servidor</span><code>${escapeHtml(e.servidor.replace(/^https?:\/\//, ''))}</code></div>
+      <div class="cfg-par"><span>Este dispositivo</span><code>${escapeHtml(e.dispositivo)}</code></div>
+      <div class="cfg-par">
+        <span>Sincronização</span>
+        <code>${e.sincronizando ? 'a cada 5 min' : 'parada'}</code>
+      </div>
+      ${e.ultimoErro ? `<p class="cfg-nota erro">${escapeHtml(e.ultimoErro)}</p>` : ''}
+      <button class="btn btn-secondary btn-inline" id="btn-sync">Sincronizar agora</button>
+    </div>
+
+    <div class="cfg-secao">
+      <h4 class="cfg-titulo">Sair</h4>
+      <p class="cfg-nota">
+        Sair apaga só a sessão desta máquina. Atividades, textos e segmentos
+        continuam no servidor, e os segmentos ainda não enviados ficam no disco
+        esperando você entrar de novo.
+      </p>
+      <button class="btn btn-secondary btn-inline" id="btn-sair">Sair desta máquina</button>
+    </div>
+  `;
+
+  document.getElementById('btn-sync').addEventListener('click', async (ev) => {
+    ev.currentTarget.disabled = true;
+    ev.currentTarget.textContent = 'Sincronizando…';
+    try {
+      await RastroAPI.sincronizar();
+      toast('Sincronizado');
+    } catch (err) {
+      toast(err.message);
+    }
+    renderAccountTab(body);
   });
 
-  document.getElementById('btn-import').addEventListener('click', async () => {
-    try {
-      const result = await API.importBackup();
-      if (result) toast(`Backup importado: ${result.count} atividade(s).`);
-    } catch (err) {
-      toast('Erro ao importar backup.');
-      console.error(err);
-    }
+  document.getElementById('btn-sair').addEventListener('click', async () => {
+    await RastroAPI.sair();
+    window.location.reload();
+  });
+}
+
+/**
+ * De onde vem a inteligência que classifica o seu dia.
+ *
+ * O servidor não fala com modelo nenhum: ele monta a pergunta e espera. Quem
+ * executa é ESTA máquina — e por isso a escolha é daqui, não de lá. A chave,
+ * quando existe, nunca sobe: chave num servidor compartilhado é uma credencial
+ * a mais para vazar, rotacionar e pagar sem saber por quem.
+ */
+async function renderIaTab(body) {
+  body.innerHTML = '<p class="empty-hint">Carregando…</p>';
+  const e = await RastroAPI.estado();
+
+  const temClaude = e.executores.includes('claudecode');
+  const temOllama = e.executores.includes('ollama');
+
+  const opcao = (valor, rotulo, nota, disponivel) => `
+    <label class="cfg-opcao ${e.provedorIa === valor ? 'ativa' : ''} ${disponivel === false ? 'indisponivel' : ''}">
+      <input type="radio" name="ia-provedor" value="${valor}" ${e.provedorIa === valor ? 'checked' : ''}>
+      <span>
+        ${rotulo}
+        <em>${nota}</em>
+      </span>
+    </label>`;
+
+  body.innerHTML = `
+    <div class="cfg-secao">
+      <h4 class="cfg-titulo">Nesta máquina</h4>
+      ${opcao('claudecode', 'Claude Code',
+              temClaude ? 'Usa a assinatura já logada aqui. Sem chave, sem custo por token.'
+                        : 'Não detectado — o comando <code>claude</code> não está no PATH.', temClaude)}
+      ${opcao('ollama', 'Ollama',
+              temOllama ? `Local: o título da janela não sai da máquina. ${e.modelosOllama.length} modelo(s) baixado(s).`
+                        : 'Não detectado — o Ollama não respondeu em localhost:11434.', temOllama)}
+    </div>
+
+    <div class="cfg-secao">
+      <h4 class="cfg-titulo">Por chave de API</h4>
+      ${opcao('anthropic', 'Anthropic', 'Claude pela API. Cobrado por token.')}
+      ${opcao('openai', 'OpenAI', 'GPT pela API. Cobrado por token.')}
+      ${opcao('gemini', 'Google Gemini', 'Gemini pela API. Cobrado por token.')}
+
+      <div class="form-group" id="ia-chave-bloco">
+        <label>Chave</label>
+        <input type="password" id="ia-chave"
+               placeholder="${e.temChave ? 'já guardada — digite para trocar' : 'cole a chave aqui'}">
+        <div class="form-hint">
+          Fica <b>só nesta máquina</b>, num arquivo com permissão 600. Nunca sobe
+          para o servidor e não entra em backup nenhum.
+        </div>
+      </div>
+    </div>
+
+    <div class="cfg-secao">
+      <h4 class="cfg-titulo">Modelo</h4>
+      <input type="text" id="ia-modelo" value="${escapeHtml(e.modeloIa || '')}"
+             list="ia-modelos" placeholder="em branco usa o padrão de cada provedor">
+      <datalist id="ia-modelos">
+        ${e.modelosOllama.map((m) => `<option value="${escapeHtml(m)}">`).join('')}
+        <option value="claude-haiku-4-5">
+        <option value="gpt-4o-mini">
+        <option value="gemini-2.0-flash">
+      </datalist>
+      <div class="form-hint">
+        Modelo pequeno erra em título ambíguo. Quando errar, uma regra em
+        <b>Rastro → Regras</b> resolve de vez e vale para o histórico inteiro.
+      </div>
+    </div>
+
+    <button class="btn" id="btn-salvar-ia">Salvar</button>
+  `;
+
+  const bloco = document.getElementById('ia-chave-bloco');
+  const comChave = () => ['anthropic', 'openai', 'gemini']
+    .includes(document.querySelector('input[name="ia-provedor"]:checked')?.value);
+
+  const atualizar = () => {
+    bloco.classList.toggle('oculto', !comChave());
+    body.querySelectorAll('.cfg-opcao').forEach((el) => {
+      el.classList.toggle('ativa', el.querySelector('input').checked);
+    });
+  };
+  atualizar();
+  body.querySelectorAll('input[name="ia-provedor"]').forEach((r) => {
+    r.addEventListener('change', atualizar);
+  });
+
+  document.getElementById('btn-salvar-ia').addEventListener('click', async (ev) => {
+    const patch = {
+      provedorIa: document.querySelector('input[name="ia-provedor"]:checked')?.value || '',
+      modeloIa: document.getElementById('ia-modelo').value.trim()
+    };
+    // Campo em branco quer dizer "não mexi na chave", não "apague a chave".
+    const chave = document.getElementById('ia-chave').value.trim();
+    if (chave) patch.chaveIa = chave;
+
+    ev.currentTarget.disabled = true;
+    await RastroAPI.configurar(patch);
+    toast('Configuração de IA salva');
+    renderIaTab(body);
   });
 }
 
@@ -1337,53 +1516,63 @@ function renderShortcutsTab(body) {
   document.getElementById('btn-test-panel').addEventListener('click', () => API.showPanelWindow());
 }
 
-function renderNotificationsTab(body) {
-  body.innerHTML = `
-    <div class="form-group">
-      <div class="checkbox-row">
-        <input type="checkbox" id="cfg-sound" ${settingsDraft.soundEnabled ? 'checked' : ''}>
-        <label for="cfg-sound">Tocar som no alerta</label>
-      </div>
-      <div class="form-hint">Um chime curto toca junto com a notificação da atividade.</div>
-    </div>
-
-    <div class="form-group">
-      <label>Repetição do alerta</label>
-      <div class="form-hint">
-        Enquanto uma atividade não for concluída, o alerta (notificação + som) repete
-        sozinho no mesmo intervalo definido nela (!N) — não é preciso configurar nada aqui.
-      </div>
-    </div>
-  `;
-
-  document.getElementById('cfg-sound').addEventListener('change', (e) => {
-    settingsDraft.soundEnabled = e.target.checked;
-  });
-}
-
-function renderVolumeTab(body) {
+/**
+ * Alertas: a notificação e o som dela, na mesma tela.
+ *
+ * Eram duas abas, e a separação obrigava a ir e voltar para ajustar uma coisa
+ * só — ligar o som numa aba e escolher o volume em outra.
+ */
+function renderAlertsTab(body) {
   const volume = Number.isFinite(Number(settingsDraft.soundVolume)) ? Number(settingsDraft.soundVolume) : 60;
   body.innerHTML = `
-    <div class="form-group">
-      <label>Volume do chime</label>
-      <div class="volume-row">
-        <input type="range" id="cfg-sound-volume" min="0" max="100" step="5" value="${volume}">
-        <span class="volume-value" id="cfg-sound-volume-value">${volume}%</span>
+    <div class="cfg-secao">
+      <h4 class="cfg-titulo">Som do alerta</h4>
+
+      <label class="cfg-chave">
+        <input type="checkbox" id="cfg-sound" ${settingsDraft.soundEnabled ? 'checked' : ''}>
+        <span>
+          Tocar um chime junto com a notificação
+          <em>Volume próprio, independente do volume geral do sistema.</em>
+        </span>
+      </label>
+
+      <div class="form-group" id="cfg-volume-bloco" class="${settingsDraft.soundEnabled ? '' : 'oculto'}">
+        <div class="volume-row">
+          <input type="range" id="cfg-sound-volume" min="0" max="100" step="5" value="${volume}">
+          <span class="volume-value" id="cfg-sound-volume-value">${volume}%</span>
+          <button class="btn btn-secondary btn-inline" id="btn-test-sound">Testar</button>
+        </div>
       </div>
-      <div class="form-hint">Volume próprio do alerta — independente do volume geral do sistema.</div>
-      <button class="btn btn-secondary btn-inline" id="btn-test-sound">Testar som</button>
+    </div>
+
+    <div class="cfg-secao">
+      <h4 class="cfg-titulo">Repetição</h4>
+      <p class="cfg-nota">
+        O alerta repete sozinho no intervalo da própria atividade (o <code>!N</code>)
+        até você concluí-la. Não há o que configurar aqui — avisar uma vez e sumir
+        é como um lembrete deixa de servir.
+      </p>
     </div>
   `;
 
+  const chave = document.getElementById('cfg-sound');
+  const bloco = document.getElementById('cfg-volume-bloco');
   const range = document.getElementById('cfg-sound-volume');
-  const valueLabel = document.getElementById('cfg-sound-volume-value');
+  const rotulo = document.getElementById('cfg-sound-volume-value');
+
+  bloco.classList.toggle('oculto', !chave.checked);
+  chave.addEventListener('change', (e) => {
+    settingsDraft.soundEnabled = e.target.checked;
+    bloco.classList.toggle('oculto', !e.target.checked);
+  });
   range.addEventListener('input', () => {
     settingsDraft.soundVolume = Number(range.value);
-    valueLabel.textContent = `${range.value}%`;
+    rotulo.textContent = `${range.value}%`;
   });
-
-  document.getElementById('btn-test-sound').addEventListener('click', () => API.testSound(Number(range.value)));
+  document.getElementById('btn-test-sound')
+    .addEventListener('click', () => API.testSound(Number(range.value)));
 }
+
 
 const KEY_ALIASES = {
   ArrowUp: 'Up',
