@@ -325,7 +325,7 @@ cat <<RESUMO
          Zero Trust > Networks > Tunnels > Create a tunnel > Cloudflared
          nome: activity-manager
          Public Hostname:
-             Subdomain     rastro
+             Subdomain     activity-manager
              Domain        matheuszem.org
              Service Type  HTTP
              URL           activity-backend:8090
@@ -340,7 +340,7 @@ cat <<RESUMO
          docker logs -f activity-tunel        # espere "Registered tunnel connection"
 
   4) No app, aba Rastro > Conta:
-         Servidor   https://rastro.matheuszem.org
+         Servidor   https://activity-manager.matheuszem.org
          E-mail     o seu
          Senha      a que você escolher
          Convite    ${CONVITE}
