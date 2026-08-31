@@ -1,0 +1,49 @@
+# Servidor pessoal: poucas contas, uma máquina. Tudo que muda entre a sua
+# máquina e a VPS vem de variável de ambiente — o arquivo não guarda segredo.
+spring:
+  application:
+    name: activity-manager
+  datasource:
+    url: ${AM_DB_URL:jdbc:postgresql://localhost:5434/activity_manager}
+    username: ${AM_DB_USER:activity}
+    password: ${AM_DB_SENHA:activity}
+  jpa:
+    hibernate:
+      # O dono do schema é o Flyway. `validate` faz a aplicação recusar subir se
+      # o banco divergir do que o código espera, em vez de "consertar" sozinha e
+      # a divergência aparecer com dado perdido.
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: ${AM_PORTA:8090}
+  forward-headers-strategy: framework
+
+am:
+  jwt:
+    # SEM padrão de propósito: segredo padrão em produção é o mesmo que nenhum.
+    segredo: ${AM_JWT_SEGREDO}
+    validade-dias: ${AM_JWT_DIAS:30}
+  registro:
+    convite: ${AM_CONVITE:}
+    maximo-contas: ${AM_MAX_CONTAS:5}
+  ia:
+    # `local` significa: o servidor NÃO chama modelo nenhum — ele enfileira o
+    # pedido e um dispositivo do usuário executa no ollama ou no claude da
+    # máquina dele. É o único provedor que a VPS não consegue cumprir sozinha.
+    provedor: ${AM_IA_PROVEDOR:local}
+    chave: ${AM_IA_CHAVE:}
+    modelo: ${AM_IA_MODELO:claude-haiku-4-5}
+    tempo-limite-segundos: ${AM_IA_TIMEOUT:120}
+    # Prazo da reserva de uma tarefa por um dispositivo. Máquina que desligou no
+    # meio devolve a tarefa sozinha quando isto vence.
+    reserva-minutos: ${AM_IA_RESERVA:10}
+
+logging:
+  level:
+    dev.activitymanager: ${AM_LOG:INFO}
