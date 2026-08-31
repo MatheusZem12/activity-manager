@@ -539,6 +539,7 @@ function renderPanelMode() {
         <nav class="nav">
           <button data-screen="dashboard" class="${currentScreen === 'dashboard' ? 'active' : ''}">Atividades</button>
           <button data-screen="clipboard" class="${currentScreen === 'clipboard' ? 'active' : ''}">Clipboard</button>
+          <button data-screen="rastro" class="${currentScreen === 'rastro' ? 'active' : ''}">Rastro</button>
           <button data-screen="settings" class="${currentScreen === 'settings' ? 'active' : ''}">Configurações</button>
         </nav>
       </header>
@@ -553,6 +554,7 @@ function renderPanelMode() {
       editingEntryId = null;
       settingsTab = 'geral';
       settingsDraft = null;
+      if (currentScreen === 'rastro') Rastro.invalidar();
       renderPanelMode();
     });
   });
@@ -567,6 +569,8 @@ function renderScreen() {
   if (!content) return;
   if (currentScreen === 'dashboard') renderDashboard(content);
   else if (currentScreen === 'clipboard') renderClipboardScreen(content);
+  // A aba Rastro se desenha sozinha e é assíncrona: os dados vêm do backend.
+  else if (currentScreen === 'rastro') Rastro.render(content, () => renderScreen());
   else if (currentScreen === 'settings') renderSettings(content);
 }
 
