@@ -15,6 +15,7 @@ const Rastro = (() => {
   let local = null;
   let categorias = [];
   let regras = [];
+  let serie = null;
   let subAba = 'hoje';
   let erro = null;
   let ocupado = false;
@@ -42,6 +43,13 @@ const Rastro = (() => {
       .replace(/"/g, '&quot;');
   }
 
+  /** As duas últimas semanas, para a série ter contexto de comparação. */
+  function ultimosDias(n) {
+    const fim = new Date(); fim.setHours(24, 0, 0, 0);
+    const inicio = new Date(fim); inicio.setDate(inicio.getDate() - n);
+    return [inicio.toISOString(), fim.toISOString()];
+  }
+
   function limitesDoDia() {
     const inicio = new Date(); inicio.setHours(0, 0, 0, 0);
     const fim = new Date(); fim.setHours(24, 0, 0, 0);
@@ -56,6 +64,9 @@ const Rastro = (() => {
       try {
         const { de, ate } = limitesDoDia();
         relatorio = await RastroAPI.relatorio(de, ate);
+        // A série é opcional: se o servidor estiver numa versão sem ela, o
+        // resto da aba continua valendo. Recurso novo não pode apagar o antigo.
+        serie = await RastroAPI.serie(...ultimosDias(14)).catch(() => null);
         categorias = (await RastroAPI.categorias()).categorias || [];
         regras = (await RastroAPI.regras()).regras || [];
       } catch (e) {
@@ -97,32 +108,46 @@ const Rastro = (() => {
           categoria, projeto e ociosidade são decididos no servidor.
         </div>
         <h3 class="rastro-titulo">Tempo por aplicativo — hoje</h3>
-        <p class="rastro-resumo">${local ? local.segmentos : 0} segmentos · ${duracao(total)}</p>
-        ${barras(local ? local.apps : [], total, () => 'var(--accent, #4C8DFF)')}`;
+        ${Graficos.barras(local ? local.apps : [])}`;
     }
 
     const totalCat = relatorio.categorias.reduce((s, c) => s + c.segundos, 0);
-    const totalProj = relatorio.projetos.reduce((s, p) => s + p.segundos, 0);
-    const totalApp = relatorio.apps.reduce((s, a) => s + a.segundos, 0);
+    const cats = (serie && serie.categorias) || relatorio.categorias;
 
     return `
       <div class="rastro-cartoes">
-        <div class="rastro-cartao"><span>Registrado</span><strong>${duracao(totalCat)}</strong></div>
-        <div class="rastro-cartao"><span>Ocioso</span><strong>${duracao(relatorio.ociosoSegundos)}</strong></div>
+        <div class="rastro-cartao"><span>Registrado hoje</span><strong>${Graficos.duracao(totalCat)}</strong></div>
+        <div class="rastro-cartao"><span>Ocioso</span><strong>${Graficos.duracao(relatorio.ociosoSegundos)}</strong></div>
         <div class="rastro-cartao ${relatorio.naoClassificadoSegundos ? 'alerta' : ''}">
-          <span>Não classificado</span><strong>${duracao(relatorio.naoClassificadoSegundos)}</strong>
+          <span>Não classificado</span><strong>${Graficos.duracao(relatorio.naoClassificadoSegundos)}</strong>
         </div>
       </div>
 
-      <h3 class="rastro-titulo">Por categoria</h3>
-      ${barras(relatorio.categorias.map((c) => ({ nome: c.nome, segundos: c.segundos, cor: c.cor })),
-               totalCat, (i) => i.cor)}
+      <div class="g-cartao">
+        <div class="g-cabecalho">
+          <h3>Últimas duas semanas</h3>
+          <p>Como cada dia se dividiu. A altura é quanto tempo a máquina foi usada.</p>
+        </div>
+        ${serie ? Graficos.empilhado(serie.dias, serie.categorias) : ''}
+        ${Graficos.legenda(cats)}
+      </div>
 
-      <h3 class="rastro-titulo">Por projeto</h3>
-      ${barras(relatorio.projetos, totalProj, () => 'var(--accent, #4C8DFF)')}
+      <div class="rastro-colunas">
+        <div class="g-cartao">
+          <div class="g-cabecalho"><h3>Por categoria — hoje</h3></div>
+          ${Graficos.barras(relatorio.categorias.map((c) => ({ nome: c.nome, segundos: c.segundos, cor: c.cor })))}
+        </div>
 
-      <h3 class="rastro-titulo">Por aplicativo</h3>
-      ${barras(relatorio.apps, totalApp, () => '#888')}`;
+        <div class="g-cartao">
+          <div class="g-cabecalho"><h3>Por projeto — hoje</h3></div>
+          ${Graficos.barras(relatorio.projetos, { vazio: 'Nenhum projeto reconhecido ainda.' })}
+        </div>
+      </div>
+
+      <div class="g-cartao">
+        <div class="g-cabecalho"><h3>Por aplicativo — hoje</h3></div>
+        ${Graficos.barras(relatorio.apps)}
+      </div>`;
   }
 
   // -------------------------------------------------------------- categorias

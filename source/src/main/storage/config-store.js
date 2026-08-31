@@ -17,7 +17,6 @@ const DEFAULT_CONFIG = {
   // Abre/foca o painel lateral (a "telinha" com a lista de atividades).
   globalShortcutPanel: 'Ctrl+Alt+P',
   maxTitleLength: 120, // título de um texto do clipboard (o conteúdo é livre)
-  panelSide: 'right', // 'right' | 'left' — borda onde o painel encosta
   startOnLogin: true,
   soundEnabled: true,
   // Volume do chime de alerta, independente do volume do sistema (0-100).
@@ -48,7 +47,6 @@ function saveConfig(patch) {
   config.globalShortcutPanel =
     (config.globalShortcutPanel || DEFAULT_CONFIG.globalShortcutPanel).trim() || DEFAULT_CONFIG.globalShortcutPanel;
   config.maxTitleLength = Math.max(10, parseInt(config.maxTitleLength, 10) || 120);
-  config.panelSide = config.panelSide === 'left' ? 'left' : 'right';
   config.startOnLogin = !!config.startOnLogin;
   config.soundEnabled = !!config.soundEnabled;
   const parsedVolume = parseInt(config.soundVolume, 10);

@@ -113,6 +113,16 @@ function registrar({ aoMudar, aoEntrarNaConta } = {}) {
     return api(`/relatorio?${q}`);
   });
 
+  /**
+   * A série por dia. O fuso vai junto porque o corte do dia é local: um
+   * segmento das 22h cairia no dia seguinte se agrupado em UTC, e o gráfico
+   * mostraria madrugadas de trabalho que nunca aconteceram.
+   */
+  ipcMain.handle('rastro:serie', async (_e, { de, ate }) => {
+    const q = new URLSearchParams({ de, ate, fuso: Intl.DateTimeFormat().resolvedOptions().timeZone });
+    return api(`/relatorio/serie?${q}`);
+  });
+
   ipcMain.handle('rastro:categorias', () => api('/categorias'));
   ipcMain.handle('rastro:regras', () => api('/regras'));
 

@@ -1571,3 +1571,233 @@ input::placeholder, textarea::placeholder { color: #64748b; }
 input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* ==========================================================================
+   Janela normal: a interface deixa de ser uma coluna de 420px
+   ========================================================================== */
+
+.main-layout { max-width: 100%; }
+
+/* O conteúdo respira até 1100px e centraliza depois. Linha de texto muito
+   longa cansa de ler, e a tela pode ir a 2560px. */
+.content {
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Duas colunas quando cabe. Abaixo de 860px volta a uma — é onde dois gráficos
+   lado a lado ficariam estreitos demais para os rótulos. */
+.rastro-colunas {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+@media (min-width: 860px) {
+  .rastro-colunas { grid-template-columns: 1fr 1fr; }
+  .rastro-cartoes { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* ---------- Gráficos ---------- */
+
+.g-cartao {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.g-cabecalho { margin-bottom: 14px; }
+.g-cabecalho h3 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+}
+.g-cabecalho p {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 4px 0 0;
+  line-height: 1.45;
+}
+
+.g-vazio {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+  padding: 12px 0;
+}
+
+
+.g-legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--surface-2);
+}
+.g-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.g-item i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* ==========================================================================
+   Largura: o que foi desenhado para 420px numa janela de 1100px
+   ==========================================================================
+
+   Nada aqui é "responsivo" no sentido de encolher — é o contrário. O layout
+   nasceu numa coluna estreita, onde esticar tudo era certo porque não havia
+   alternativa. Numa janela larga, esticar vira o problema: aba de 240px, linha
+   de texto de 900px, cartão com metade de área vazia. */
+
+/* ---------- navegação ---------- */
+
+/* `flex: 1` dividia a barra em quatro fatias iguais. Com 941px cada aba virava
+   um botão de 235px com uma palavra no meio. */
+.nav button { flex: 0 0 auto; padding: 8px 16px; }
+.nav { gap: 4px; }
+
+.topbar-row { align-items: center; }
+
+/* ---------- largura de leitura ---------- */
+
+/* Listas de texto ficam em 780px: linha muito longa cansa de ler, e a de 900px
+   fazia o olho perder a linha ao voltar.
+   
+   O limite mora no `#main-content` porque as telas escrevem direto nele, sem
+   invólucro próprio. O Rastro sai da regra com `max-width: none`: gráfico usa o
+   espaço que tiver, e é justamente por isso que a janela ficou larga. */
+.content { max-width: 1100px; }
+#main-content { max-width: 780px; margin: 0 auto; width: 100%; }
+/* `:has` e não uma classe no próprio #main-content: quem sabe que é a aba
+   Rastro é o conteúdo, e ele é escrito por outro arquivo. */
+#main-content:has(.rastro) { max-width: 1100px; }
+
+/* ---------- cartão de atividade ---------- */
+
+/* Era coluna: texto em cima, botões numa segunda linha alinhada à direita. Numa
+   coluna estreita isso era necessário; com espaço, a segunda linha deixava um
+   vão de ~50px em cada cartão. Agora os botões ficam ao lado, e o cartão tem a
+   altura do seu conteúdo. */
+@media (min-width: 640px) {
+  .activity-card {
+    flex-direction: row;
+    align-items: center;
+    gap: 14px;
+  }
+  .activity-card .activity-info { min-width: 0; }
+  .activity-card .activity-actions {
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+    align-self: center;
+  }
+}
+
+.activity-text { margin-bottom: 4px; line-height: 1.4; }
+
+/* ---------- cartões do clipboard ---------- */
+
+@media (min-width: 640px) {
+  .entry-card { padding: 12px 14px; }
+}
+
+/* ---------- Gráficos: barras horizontais ---------- */
+
+.g-barras { display: flex; flex-direction: column; gap: 7px; }
+
+.g-linha {
+  display: grid;
+  grid-template-columns: minmax(80px, 148px) 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Texto usa cor de TEXTO, nunca a cor da série: quem carrega identidade é a
+   barra ao lado. Valor colorido vira decoração e compete com a própria barra. */
+.g-rotulo {
+  font-size: 12px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.g-valor {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 52px;
+  text-align: right;
+}
+
+/* O trilho mostra a escala: sem ele, uma barra curta parece falha de render em
+   vez de valor pequeno. */
+.g-trilho {
+  display: block;
+  height: 10px;
+  background: var(--surface-2);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.g-barra {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  transition: filter 0.15s;
+}
+.g-linha:hover .g-barra { filter: brightness(1.2); }
+
+.g-nota {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 10px 0 0;
+}
+
+/* ---------- Gráficos: colunas empilhadas ---------- */
+
+.g-empilhado {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 170px;
+}
+
+.g-coluna {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  height: 100%;
+  min-width: 0;
+}
+
+/* A pilha cresce de baixo para cima e reserva a altura toda: assim os dias se
+   comparam entre si, e não cada um contra si mesmo. */
+.g-pilha {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 2px;                 /* o vão de 2px separa as fatias sem borda */
+  border-radius: 3px;
+  overflow: hidden;
+  background: linear-gradient(var(--surface-2), var(--surface-2)) bottom / 100% 2px no-repeat;
+}
+.g-fatia { display: block; width: 100%; border-radius: 2px; min-height: 2px; }
+
+/* Não classificado é ausência de resposta, não uma categoria — cinza, e sempre
+   no topo, para não se confundir com as cores do usuário. */
+.g-naoclass { background: var(--surface-2); }
+
+.g-dia { font-size: 10px; color: var(--text-muted); line-height: 1; }
+.g-num { font-size: 9px; color: #64748b; line-height: 1; }

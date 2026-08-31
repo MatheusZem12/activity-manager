@@ -109,21 +109,17 @@ function parseAccelerator(accelerator) {
  * se aplica e o compositor centraliza a janela float. Verificado na 0.55.2.
  */
 function panelWindowRules(config) {
-  // A lateral inteira: 8px de margem em cima, embaixo e na borda escolhida.
-  // Era 90% da altura centralizado, e a sobra não servia para nada.
-  const move = config.panelSide === 'left'
-    ? 'move 8 8'
-    : 'move (monitor_w-window_w-8) 8';
-  return `# Painel (ajusta size/move conforme panelSide).
-#
-# Sem stay_focused aqui, de propósito — ao contrário das janelas de captura,
-# o painel FICA aberto. Com stay_focused ele prenderia o teclado e você não
-# conseguiria digitar em mais nenhuma janela enquanto ele estivesse na tela.
-windowrule = float on, ${PANEL_MATCH}
-windowrule = size 420 (monitor_h-16), ${PANEL_MATCH}
-windowrule = ${move}, ${PANEL_MATCH}
-windowrule = pin on, ${PANEL_MATCH}`;
-}
+  // O painel é uma janela NORMAL: sem float, sem pin, sem posição imposta.
+  //
+  // Ele já teve regra de float + size + move + pin, para viver encostado na
+  // borda e sempre por cima. Saiu inteira: window rule de posição falha em
+  // silêncio (o hyprctl responde `ok` e nada se move), e uma janela sempre por
+  // cima cobre a borda do editor o dia todo. O compositor cuida disso melhor
+  // que qualquer regra que a gente escrevesse.
+  //
+  // As janelas de CAPTURA continuam com regra — elas são overlay de verdade,
+  // aparecem por um instante e somem.
+  return '';}
 
 function bindBlock(combo, arg) {
   const mods = combo.modifiers.join(' ');
