@@ -1371,9 +1371,15 @@ async function renderIaTab(body) {
   const temClaude = e.executores.includes('claudecode');
   const temOllama = e.executores.includes('ollama');
 
+  // Sem escolha salva, o executor cai no primeiro disponível — e a tela precisa
+  // dizer QUAL, senão mostra cinco opções apagadas enquanto uma delas está
+  // classificando o dia inteiro. Preferência ausente não é ausência de resposta.
+  const automatico = !e.provedorIa;
+  const atual = e.provedorIa || e.executores[0] || '';
+
   const opcao = (valor, rotulo, nota, disponivel) => `
-    <label class="cfg-opcao ${e.provedorIa === valor ? 'ativa' : ''} ${disponivel === false ? 'indisponivel' : ''}">
-      <input type="radio" name="ia-provedor" value="${valor}" ${e.provedorIa === valor ? 'checked' : ''}>
+    <label class="cfg-opcao ${atual === valor ? 'ativa' : ''} ${disponivel === false ? 'indisponivel' : ''}">
+      <input type="radio" name="ia-provedor" value="${valor}" ${atual === valor ? 'checked' : ''}>
       <span>
         ${rotulo}
         <em>${nota}</em>
@@ -1383,6 +1389,7 @@ async function renderIaTab(body) {
   body.innerHTML = `
     <div class="cfg-secao">
       <h4 class="cfg-titulo">Nesta máquina</h4>
+      ${automatico && atual ? '<div class="form-hint">Nada escolhido ainda — está usando o primeiro que respondeu nesta máquina. Salvar fixa a escolha.</div>' : ''}
       ${opcao('claudecode', 'Claude Code',
               temClaude ? 'Usa a assinatura já logada aqui. Sem chave, sem custo por token.'
                         : 'Não detectado — o comando <code>claude</code> não está no PATH.', temClaude)}
