@@ -1410,3 +1410,164 @@ html, body {
 .cfg-secao input[type="password"]:focus { outline: none; border-color: var(--primary); }
 
 .cfg-secao .form-hint { margin-top: 6px; }
+
+/* ==========================================================================
+   Controles — uma passada única sobre botão, select, input e range.
+   ==========================================================================
+
+   Estavam cada um por si: os `select` sem estilo nenhum (o GTK desenhava a seta
+   clara, fora do tema escuro), os botões com três alturas diferentes conforme a
+   tela, e os `range` nativos. Aqui eles passam a ter a mesma linguagem: mesma
+   altura, mesmo raio, mesmo foco. */
+
+:root {
+  --controle-altura: 34px;
+  --controle-raio: 8px;
+  --borda: #334155;
+}
+
+/* ---------- select ---------- */
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: var(--controle-altura);
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  border-radius: var(--controle-raio);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  padding: 0 32px 0 10px;
+  cursor: pointer;
+
+  /* A seta é desenhada aqui porque a nativa do GTK vem clara e não acompanha o
+     tema — num painel escuro ela aparece como um retângulo branco. SVG embutido
+     para não depender de fonte de ícone nem de arquivo externo. */
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='none' stroke='%2394a3b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+select:hover { border-color: var(--borda); }
+select:focus { outline: none; border-color: var(--primary); }
+select option { background: var(--surface); color: var(--text); }
+
+/* ---------- botão ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: var(--controle-altura);
+  padding: 0 14px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid transparent;
+  border-radius: var(--controle-raio);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+
+/* Secundário como contorno, não como bloco cinza: assim ele não disputa
+   atenção com o primário na mesma tela. */
+.btn-secondary {
+  background: transparent;
+  border-color: var(--borda);
+  color: var(--text);
+}
+.btn-secondary:hover:not(:disabled) { background: var(--surface-2); border-color: #475569; }
+
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-sm { height: 26px; padding: 0 10px; font-size: 11px; }
+.btn-inline { margin-top: 10px; }
+
+/* ---------- range ---------- */
+
+input[type="range"] {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 4px;
+  background: var(--surface-2);
+  border-radius: 2px;
+  outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--primary);
+  cursor: pointer;
+  border: none;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--primary); cursor: pointer; border: none;
+}
+
+/* ---------- caixa de seleção ---------- */
+
+input[type="checkbox"], input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--borda);
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+}
+input[type="checkbox"] { border-radius: 4px; }
+input[type="radio"] { border-radius: 50%; }
+
+input[type="checkbox"]:checked, input[type="radio"]:checked {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 5px; top: 1px;
+  width: 4px; height: 9px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+input[type="radio"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 4px; top: 4px;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+/* ---------- campos de texto e número ---------- */
+
+input[type="text"], input[type="number"], input[type="email"],
+input[type="password"], input[type="search"], textarea {
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  border-radius: var(--controle-raio);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  padding: 8px 10px;
+}
+input:hover:not(:focus), textarea:hover:not(:focus) { border-color: var(--borda); }
+input:focus, textarea:focus { outline: none; border-color: var(--primary); }
+input::placeholder, textarea::placeholder { color: #64748b; }
+
+/* O spinner do number é largo e claro no GTK, e o campo já tem `min`. */
+input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
