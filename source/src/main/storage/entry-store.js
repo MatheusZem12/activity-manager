@@ -1,148 +1,99 @@
-const { app } = require('electron');
-const fs = require('fs');
-const path = require('path');
-
-const STATE_FILE = 'entries.json';
-
-function statePath() {
-  return path.join(app.getPath('userData'), STATE_FILE);
-}
-
-function genId() {
-  return `entry_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function defaultState() {
-  return { version: 1, entries: [] };
-}
-
-function dedupeTags(raw) {
-  const out = [];
-  for (const t of raw) {
-    const tag = String(t).trim().toLowerCase();
-    if (tag && !out.includes(tag)) out.push(tag);
-  }
-  return out;
-}
-
 /**
- * Normaliza uma entrada. As regras aqui são o invariante do arquivo:
+ * Os textos do clipboard — agora no banco, não em arquivo.
  *
- * - title: string trimmed (o parser já removeu os #tags antes de chegar aqui);
- *   pode ficar vazio — a exibição deriva o título da 1ª linha do conteúdo;
- * - content: string preservada **literalmente** (nunca trim, nunca parse) —
- *   é exatamente o que será colado no clipboard;
- * - tags: lowercase, sem duplicatas;
- * - lastCopiedAt: epoch ms da última cópia via app, null até a primeira;
- * - copyCount: contador de cópias.
+ * Mesmo desenho do `activity-store`: o backend é dono do dado, isto aqui é um
+ * espelho em memória para as leituras seguirem síncronas.
+ *
+ * O invariante que não pode quebrar: `content` viaja e volta **literalmente**.
+ * Nada de trim, nada de normalizar quebra de linha — é exatamente isso que vai
+ * para o clipboard.
  */
-function normalizeEntry(raw = {}) {
-  const now = Date.now();
+const api = require('./api-client');
+
+let espelho = [];
+let carregado = false;
+
+function daApi(t) {
   return {
-    id: raw.id || genId(),
-    title: (raw.title || '').trim(),
-    content: typeof raw.content === 'string' ? raw.content : String(raw.content || ''),
-    tags: Array.isArray(raw.tags) ? dedupeTags(raw.tags) : [],
-    createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : now,
-    updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : now,
-    lastCopiedAt: typeof raw.lastCopiedAt === 'number' ? raw.lastCopiedAt : null,
-    copyCount: typeof raw.copyCount === 'number' ? raw.copyCount : 0
+    id: t.id,
+    title: t.titulo || '',
+    content: t.conteudo,
+    tags: t.tags || [],
+    createdAt: Date.parse(t.criadoEm),
+    updatedAt: Date.parse(t.criadoEm),
+    lastCopiedAt: t.copiadoEm ? Date.parse(t.copiadoEm) : null,
+    copyCount: t.copias || 0
   };
 }
 
-// O arquivo só é tocado por este processo, então dá para ler uma vez e
-// trabalhar em memória; o disco é atualizado a cada gravação.
-let cache = null;
-
-function loadState() {
-  if (cache) return cache;
-  try {
-    const data = JSON.parse(fs.readFileSync(statePath(), 'utf-8'));
-    cache = {
-      version: data.version || 1,
-      entries: Array.isArray(data.entries) ? data.entries.map(normalizeEntry) : []
-    };
-  } catch {
-    cache = defaultState();
-  }
-  return cache;
+async function carregar() {
+  const { textos } = await api.pedir('/textos');
+  espelho = textos.map(daApi);
+  carregado = true;
+  return espelho;
 }
 
-function saveState(state) {
-  cache = state;
-  fs.writeFileSync(statePath(), JSON.stringify(state, null, 2), 'utf-8');
-  return state;
+function pronto() {
+  return carregado;
 }
 
 function getAll() {
-  return loadState().entries;
+  return espelho;
 }
 
 function getEntry(id) {
-  return loadState().entries.find((e) => e.id === id) || null;
-}
-
-/**
- * Cria (unshift, mais novas primeiro) ou atualiza uma entrada. Numa atualização
- * o updatedAt é reescrito; createdAt/lastCopiedAt/copyCount são preservados a
- * menos que o patch os traga.
- */
-function saveEntry(patch) {
-  const state = loadState();
-  const index = patch.id ? state.entries.findIndex((e) => e.id === patch.id) : -1;
-
-  let saved;
-  if (index === -1) {
-    saved = normalizeEntry(patch);
-    state.entries.unshift(saved);
-  } else {
-    const current = state.entries[index];
-    saved = normalizeEntry({ ...current, ...patch, id: current.id, updatedAt: Date.now() });
-    state.entries[index] = saved;
-  }
-
-  saveState(state);
-  return saved;
-}
-
-/**
- * Marca uma entrada como copiada agora: atualiza lastCopiedAt e incrementa
- * copyCount. Devolve a entrada atualizada (ou null se não existir).
- */
-function markCopied(id) {
-  const state = loadState();
-  const index = state.entries.findIndex((e) => e.id === id);
-  if (index === -1) return null;
-  state.entries[index].lastCopiedAt = Date.now();
-  state.entries[index].copyCount = (state.entries[index].copyCount || 0) + 1;
-  saveState(state);
-  return state.entries[index];
-}
-
-function deleteEntry(id) {
-  const state = loadState();
-  state.entries = state.entries.filter((e) => e.id !== id);
-  saveState(state);
-  return true;
+  return espelho.find((e) => e.id === id) || null;
 }
 
 function exportAll() {
-  return loadState();
+  return { version: 2, entries: espelho };
 }
 
-function importAll(data) {
+async function saveEntry(patch) {
+  const corpo = {};
+  if (patch.title !== undefined) corpo.titulo = patch.title;
+  if (patch.content !== undefined) corpo.conteudo = patch.content;
+  if (patch.tags !== undefined) corpo.tags = patch.tags;
+
+  const salvo = patch.id
+    ? await api.pedir(`/textos/${patch.id}`, { metodo: 'PATCH', corpo })
+    : await api.pedir('/textos', { metodo: 'POST', corpo });
+  await carregar();
+  return daApi(salvo);
+}
+
+async function markCopied(id) {
+  const salvo = await api.pedir(`/textos/${id}/copiar`, { metodo: 'POST' });
+  await carregar();
+  return daApi(salvo);
+}
+
+async function deleteEntry(id) {
+  await api.pedir(`/textos/${id}`, { metodo: 'DELETE' });
+  await carregar();
+  return true;
+}
+
+async function importAll(data) {
   if (!data || !Array.isArray(data.entries)) {
     throw new Error('Arquivo de backup inválido.');
   }
-  const state = {
-    version: data.version || 1,
-    entries: data.entries.map(normalizeEntry)
-  };
-  saveState(state);
-  return { count: state.entries.length };
+  const lote = data.entries.map((e) => ({
+    titulo: e.title || '',
+    conteudo: e.content,
+    tags: e.tags || [],
+    copias: e.copyCount || 0,
+    copiadoEm: e.lastCopiedAt ? new Date(e.lastCopiedAt).toISOString() : null,
+    criadoEm: new Date(e.createdAt || Date.now()).toISOString()
+  }));
+  const r = await api.pedir('/textos/importar', { metodo: 'POST', corpo: lote });
+  await carregar();
+  return { count: r.importados };
 }
 
 module.exports = {
+  carregar,
+  pronto,
   getAll,
   getEntry,
   saveEntry,
