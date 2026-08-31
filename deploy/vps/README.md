@@ -117,6 +117,28 @@ docker logs -f activity-tunel          # espere "Registered tunnel connection"
 O perfil `tunel` fica desligado por padrão porque ele é a **única** peça que
 expõe o serviço na internet.
 
+## Testar
+
+```bash
+scp deploy/vps/verificar.sh root@SEU-IP:~/     # no seu PC
+bash ~/verificar.sh                            # na VPS
+```
+
+Ele checa sete camadas em ordem e **para na primeira que falhar**, dizendo o que
+fazer — seguir adiante só produziria erros em cascata que escondem a causa:
+
+```
+1. Rede          activity-net existe?
+2. Banco         postgres_activity saudável?
+3. Imagem        o GHCR tem :dev, e a VPS consegue puxar?
+4. Serviço       activity-backend saudável?
+5. API           responde em 127.0.0.1:8091?
+6. Túnel         cloudflared registrou conexão?
+7. Função        quantas contas existem, e qual é o convite
+```
+
+Não muda nada e pode rodar quantas vezes quiser.
+
 ## Watchtower: o deploy é o push
 
 Esta VPS já roda um Watchtower (do compose do finance), com
