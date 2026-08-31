@@ -70,6 +70,7 @@ contextBridge.exposeInMainWorld('RastroAPI', {
   salvarRegra: (id, dados) => ipcRenderer.invoke('rastro:salvarRegra', { id, dados }),
   apagarRegra: (id) => ipcRenderer.invoke('rastro:apagarRegra', id),
   entrar: (dados) => ipcRenderer.invoke('rastro:entrar', dados),
+  sair: () => ipcRenderer.invoke('rastro:sair'),
   configurar: (patch) => ipcRenderer.invoke('rastro:configurar', patch),
   sincronizar: () => ipcRenderer.invoke('rastro:sincronizar')
 });

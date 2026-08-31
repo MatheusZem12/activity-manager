@@ -15,6 +15,7 @@ const { Collector } = require('./collector');
 const { Sync } = require('./sync');
 const { capacidades, modelosDoOllama } = require('./executor');
 const config = require('./config');
+const servidor = require('./servidor');
 const store = require('../storage/segment-store');
 
 let collector = null;
@@ -53,10 +54,15 @@ async function estado() {
   return {
     coletando: Boolean(collector),
     sincronizando: Boolean(sync && sync.configurado()),
-    servidor: cfg.servidor,
+    servidor: servidor.endereco(),
     dispositivo: cfg.dispositivo,
     preferido: cfg.preferido,
     modelo: cfg.modelo,
+    provedorIa: cfg.provedorIa || '',
+    // A chave em si NUNCA volta para a tela: só se ela existe. Devolver o valor
+    // seria expor um segredo num canal que não precisa dele.
+    temChave: Boolean(cfg.chaveIa),
+    modeloIa: cfg.modeloIa || '',
     temToken: Boolean(cfg.token),
     executores: await capacidades(),
     modelosOllama: await modelosDoOllama(),
@@ -69,8 +75,7 @@ async function estado() {
 /** Fala com o backend usando a configuração desta máquina. */
 async function api(caminho, opcoes = {}) {
   const cfg = config.ler();
-  if (!cfg.servidor) throw new Error('Sem servidor configurado.');
-  const r = await fetch(`${cfg.servidor}/api${caminho}`, {
+  const r = await fetch(`${servidor.endereco()}/api${caminho}`, {
     ...opcoes,
     headers: {
       'content-type': 'application/json',
@@ -123,8 +128,7 @@ function registrar({ aoMudar, aoEntrarNaConta } = {}) {
     api(`/regras/${id}`, { method: 'DELETE' }));
 
   /** Entrar: o token fica só nesta máquina, nunca sai daqui. */
-  ipcMain.handle('rastro:entrar', async (_e, { servidor, email, senha, convite }) => {
-    config.gravar({ servidor: (servidor || '').replace(/\/+$/, '') });
+  ipcMain.handle('rastro:entrar', async (_e, { email, senha, convite }) => {
     const r = await api('/sessao', {
       method: 'POST',
       body: JSON.stringify({ email, senha, convite })
@@ -135,6 +139,13 @@ function registrar({ aoMudar, aoEntrarNaConta } = {}) {
     // de migrar os JSON antigos para o banco.
     await aoEntrar();
     return { email: r.email };
+  });
+
+  /** Sair: apaga só o token. Os segmentos já gravados continuam no disco. */
+  ipcMain.handle('rastro:sair', () => {
+    config.gravar({ token: '' });
+    reiniciarSync();
+    return { ok: true };
   });
 
   ipcMain.handle('rastro:configurar', (_e, patch) => {

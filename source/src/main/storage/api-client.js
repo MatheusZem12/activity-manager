@@ -1,29 +1,28 @@
 /**
  * O cliente HTTP do app. Fino de propósito.
  *
- * Nada aqui decide nada: só empacota pedido e desembrulha resposta. Endereço e
- * token vêm da configuração desta máquina (`rastro/config.js`), que nunca sobe
- * para o servidor.
+ * Nada aqui decide nada: só empacota pedido e desembrulha resposta. O endereço
+ * é constante (`rastro/servidor.js`); o token é desta máquina e nunca sobe.
  */
 const config = require('../rastro/config');
+const servidor = require('../rastro/servidor');
 
 class SemSessao extends Error {
   constructor() {
-    super('Sem sessão. Abra o painel em Rastro → Conta e entre no servidor.');
+    super('Sem sessão. Entre na sua conta para continuar.');
     this.semSessao = true;
   }
 }
 
 function configurado() {
-  const c = config.ler();
-  return Boolean(c.servidor && c.token);
+  return Boolean(config.ler().token);
 }
 
 async function pedir(caminho, { metodo = 'GET', corpo, tempoLimite = 30000 } = {}) {
   const c = config.ler();
-  if (!c.servidor || !c.token) throw new SemSessao();
+  if (!c.token) throw new SemSessao();
 
-  const r = await fetch(`${c.servidor}/api${caminho}`, {
+  const r = await fetch(`${servidor.endereco()}/api${caminho}`, {
     method: metodo,
     headers: { 'content-type': 'application/json', authorization: `Bearer ${c.token}` },
     body: corpo === undefined ? undefined : JSON.stringify(corpo),

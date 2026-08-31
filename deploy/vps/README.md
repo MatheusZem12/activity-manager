@@ -194,11 +194,27 @@ da lista.
 | lingua | 5433 / 8090 |
 | **activity-manager** | **5434 / 8091** |
 
-## A IA na VPS
+## Não há IA na VPS
 
-O padrão é `AM_IA_PROVEDOR=local`: o servidor monta o prompt e o schema — que é
-regra de negócio — mas **não chama modelo nenhum**. Ele enfileira, e um
-dispositivo seu roda no `ollama` ou no `claude` daquela máquina e devolve.
+O servidor não fala com modelo nenhum. Ele monta a pergunta e o schema — que é
+regra de negócio — e enfileira em `ia_tarefa`. Quem executa é sempre uma máquina
+do usuário: o `claude` logado, um modelo no ollama, ou uma chave de API guardada
+naquele dispositivo.
 
-É o único modo em que a VPS não precisa de chave. Para o servidor classificar
-sozinho, troque para `anthropic`, `openai` ou `gemini` e preencha `AM_IA_CHAVE`.
+Por isso não existe `AM_IA_PROVEDOR` nem `AM_IA_CHAVE` aqui. Chave de IA num
+servidor é uma credencial a mais para vazar, para rotacionar e para pagar sem
+saber por quem — e nenhuma delas se paga quando o dispositivo já sabe executar.
+
+Só ficou `AM_IA_RESERVA`, que não é sobre IA: é o prazo que uma tarefa fica
+reservada para um dispositivo antes de voltar para a fila sozinha.
+
+Se você instalou antes desta mudança, o `.env` ainda tem as variáveis antigas:
+
+```bash
+scp -P 4202 deploy/vps/tirar-ia-do-env.sh root@SEU-IP:~/
+bash ~/tirar-ia-do-env.sh
+cd ~/activity-manager/service && docker compose up -d
+```
+
+Ele faz cópia antes de mexer e aborta restaurando se qualquer variável
+obrigatória sumir.

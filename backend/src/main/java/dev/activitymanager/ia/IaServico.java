@@ -28,9 +28,10 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * Tudo o que é decisão está aqui: quais títulos ainda precisam ser
  * classificados, como o prompt é escrito a partir das categorias do usuário,
- * qual o formato obrigatório da resposta, e o que fazer com ela. O que NÃO está
- * aqui é a chamada ao modelo quando ele é local — essa é a única parte que
- * precisa acontecer na máquina do usuário.
+ * qual o formato obrigatório da resposta, e o que fazer com ela.
+ *
+ * O que NÃO está aqui é a chamada ao modelo. Ela acontece sempre no dispositivo,
+ * com o que aquela máquina tiver. O servidor não guarda chave de IA nenhuma.
  */
 @Service
 public class IaServico {
