@@ -27,6 +27,10 @@ Três consequências:
 └── service/    docker-compose.yml + .env    backend + túnel
 ```
 
+Na raiz do home, e **não** junto do lingua em `~/sevices`: são projetos
+independentes, com bancos, redes e ciclos de atualização separados. Como root,
+isso é `/root/activity-manager`.
+
 Separados porque os ciclos de vida são diferentes: o backend muda a cada push, o
 Postgres quase nunca. Atualizar um não pode ter nada a ver com derrubar o outro.
 Os dois se encontram pela rede `activity-net`, que é **externa** aos dois
@@ -70,11 +74,6 @@ O script **escolhe porta livre sozinho**. Nesta VPS a 5432/8080 é do finance e 
 ocupadas, ele anda para a próxima e grava a escolhida no `.env`, em vez de
 morrer com um "Bind for 0.0.0.0:5434 failed" que não diz o que fazer.
 
-Para instalar em outro lugar que não `~/activity-manager`:
-
-```bash
-AM_RAIZ=~/sevices/activity-manager bash ~/instalar.sh
-```
 
 O `instalar.sh` gera o segredo do JWT, a senha do banco e o convite, e **imprime
 o convite no fim** — é o que você digita uma vez em cada dispositivo.
