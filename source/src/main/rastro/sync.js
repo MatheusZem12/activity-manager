@@ -18,6 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const store = require('../storage/segment-store');
 const { executar, capacidades } = require('./executor');
+const servidor = require('./servidor');
 
 const INTERVALO_MS = 5 * 60 * 1000;
 const MARCA = 'sincronizado.json';
@@ -48,7 +49,7 @@ class Sync {
   }
 
   configurado() {
-    return Boolean(this.config && this.config.servidor && this.config.token);
+    return Boolean(this.config && this.config.token);
   }
 
   iniciar() {
@@ -64,7 +65,7 @@ class Sync {
   }
 
   async api(caminho, opcoes = {}) {
-    const r = await fetch(`${this.config.servidor}/api${caminho}`, {
+    const r = await fetch(`${servidor.endereco()}/api${caminho}`, {
       ...opcoes,
       headers: {
         'content-type': 'application/json',
@@ -147,8 +148,10 @@ class Sync {
     const resposta = await executar({
       prompt: tarefa.prompt,
       esquema: tarefa.esquema,
-      preferido: this.config.preferido,
-      modelo: this.config.modelo
+      provedor: this.config.provedorIa,
+      chave: this.config.chaveIa,
+      modelo: this.config.modeloIa || this.config.modelo,
+      preferido: this.config.preferido
     });
 
     // O servidor valida índice, categoria e confiança antes de acreditar. Esta

@@ -15,12 +15,17 @@ public record Config(Jwt jwt, Registro registro, Ia ia) {
     public record Registro(String convite, int maximoContas) {}
 
     /**
-     * @param provedor      `anthropic`, `openai`, `gemini` — o servidor chama.
-     *                      `local` — o servidor enfileira e um dispositivo do
-     *                      usuário executa no ollama ou no claude da máquina.
+     * O servidor não fala com modelo nenhum, e por isso não há aqui provedor,
+     * chave nem nome de modelo.
+     *
+     * Ele monta a pergunta e o schema — que é regra de negócio — e enfileira. A
+     * chamada acontece no dispositivo, com o que aquela máquina tiver: o
+     * `claude` logado, um modelo no ollama, ou a chave de API que o dono
+     * guardou ali. Chave de IA num servidor compartilhado seria uma credencial
+     * a mais para vazar, para rotacionar e para pagar sem saber por quem.
+     *
      * @param reservaMinutos prazo da reserva de uma tarefa por um dispositivo;
-     *                      vencido, a tarefa volta para a fila sozinha
+     *                       vencido, a tarefa volta para a fila sozinha
      */
-    public record Ia(String provedor, String chave, String modelo,
-                     int tempoLimiteSegundos, int reservaMinutos) {}
+    public record Ia(int reservaMinutos) {}
 }

@@ -11,11 +11,13 @@ import org.springframework.web.bind.annotation.*;
 /**
  * A ponte com o executor.
  *
- * Só existe para o provedor `local`. O dispositivo pergunta se há algo para
- * rodar, roda no ollama ou no `claude` da máquina, e devolve. Sondagem de saída
- * e não notificação de entrada, porque sua máquina está atrás de NAT
- * residencial: o servidor não consegue te ligar, e classificação é lote diário,
- * não tem pressa.
+ * O dispositivo pergunta se há algo para rodar, executa com o que aquela máquina
+ * tiver — o `claude` logado, um modelo no ollama, uma chave de API guardada ali
+ * — e devolve.
+ *
+ * Sondagem de saída e não notificação de entrada, porque a máquina do usuário
+ * está atrás de NAT residencial: o servidor não consegue ligar para ela. E
+ * classificação é lote diário, não tem pressa.
  */
 @RestController
 @RequestMapping("/api/ia")
@@ -51,14 +53,6 @@ public class IaControlador {
     @GetMapping("/pendentes")
     public Map<String, Object> pendentes(@RequestParam String dispositivo) {
         var usuarioId = Conta.id();
-
-        // Com uma chave de API configurada, o servidor faria a chamada sozinho e
-        // não haveria fila. `local` é o único caso em que a VPS depende de uma
-        // máquina do usuário para cumprir a tarefa.
-        if (!"local".equals(config.ia().provedor())) {
-            return Map.of("provedor", config.ia().provedor(), "tarefa", Map.of());
-        }
-
         var registro = dispositivos.findByUsuarioIdAndNome(usuarioId, dispositivo);
         if (registro.isEmpty()) {
             return Map.of("tarefa", Map.of());
@@ -66,7 +60,6 @@ public class IaControlador {
 
         var reservada = servico.reservar(usuarioId, registro.get().getId());
         var resposta = new HashMap<String, Object>();
-        resposta.put("provedor", "local");
         resposta.put("reservaMinutos", config.ia().reservaMinutos());
         resposta.put("tarefa", reservada
                 .map(t -> (Object) new Tarefa(t.getId(), t.getPrompt(), t.getEsquema(), t.getChaves().length))

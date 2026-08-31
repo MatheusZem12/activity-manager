@@ -184,47 +184,60 @@ const Rastro = (() => {
   // ------------------------------------------------------------------- conta
 
   function semServidor() {
-    return '<div class="rastro-aviso">Configure o servidor na aba <b>Conta</b>.</div>';
+    return '<div class="rastro-aviso">Sem sessão. Reabra o painel para entrar.</div>';
   }
 
   function telaConta() {
     const execs = estado.executores.length
       ? estado.executores.map((e) => `<code>${esc(e)}</code>`).join(' ')
       : '<i>nenhum detectado</i>';
-    const modelos = estado.modelosOllama.map(
-      (m) => `<option value="${esc(m)}" ${estado.modelo === m ? 'selected' : ''}>${esc(m)}</option>`).join('');
+    const modelos = estado.modelosOllama.map((m) => `<option value="${esc(m)}">`).join('');
 
     return `
-      <h3 class="rastro-titulo">Servidor</h3>
+      <h3 class="rastro-titulo">Conta</h3>
       <div class="rastro-form">
-        <label>Endereço</label>
-        <input id="conta-servidor" value="${esc(estado.servidor)}" placeholder="http://localhost:8090">
-        <label>E-mail</label>
-        <input id="conta-email" type="email" placeholder="voce@exemplo.com">
-        <label>Senha</label>
-        <input id="conta-senha" type="password">
-        <label>Convite <span class="form-hint">só na primeira vez, para criar a conta</span></label>
-        <input id="conta-convite">
-        <button id="conta-entrar">${estado.temToken ? 'Entrar de novo' : 'Entrar'}</button>
         <div class="form-hint">
-          O token fica só nesta máquina. Este dispositivo se identifica como
-          <b>${esc(estado.dispositivo)}</b>.
+          Conectado a <b>${esc(estado.servidor.replace(/^https?:\/\//, ''))}</b><br>
+          Este dispositivo: <b>${esc(estado.dispositivo)}</b>
+        </div>
+        <button id="conta-sair">Sair desta máquina</button>
+        <div class="form-hint">
+          Sair apaga só a sessão. Os segmentos já gravados continuam no disco e
+          sobem quando você entrar de novo.
         </div>
       </div>
 
       <h3 class="rastro-titulo">IA nesta máquina</h3>
       <div class="rastro-form">
-        <div class="form-hint">Detectado aqui: ${execs}</div>
-        <label>Executor preferido</label>
-        <select id="conta-preferido">
-          <option value="claudecode" ${estado.preferido === 'claudecode' ? 'selected' : ''}>Claude Code (sem chave, usa sua assinatura)</option>
-          <option value="ollama" ${estado.preferido === 'ollama' ? 'selected' : ''}>Ollama (local, o título não sai da máquina)</option>
+        <div class="form-hint">
+          O servidor não fala com modelo nenhum — ele monta a pergunta e espera.
+          Quem executa é esta máquina, com o que ela tiver.<br>
+          Detectado aqui: ${execs}
+        </div>
+
+        <label>Como classificar</label>
+        <select id="conta-provedor">
+          <option value="" ${!estado.provedorIa ? 'selected' : ''}>Usar o que houver nesta máquina</option>
+          <option value="claudecode" ${estado.provedorIa === 'claudecode' ? 'selected' : ''}>Claude Code (sem chave, usa sua assinatura)</option>
+          <option value="ollama" ${estado.provedorIa === 'ollama' ? 'selected' : ''}>Ollama (local, o título não sai da máquina)</option>
+          <option value="anthropic" ${estado.provedorIa === 'anthropic' ? 'selected' : ''}>Anthropic (chave)</option>
+          <option value="openai" ${estado.provedorIa === 'openai' ? 'selected' : ''}>OpenAI (chave)</option>
+          <option value="gemini" ${estado.provedorIa === 'gemini' ? 'selected' : ''}>Gemini (chave)</option>
         </select>
-        ${modelos ? `<label>Modelo do Ollama</label><select id="conta-modelo">${modelos}</select>` : ''}
+
+        <label>Chave de API <span class="form-hint">só para os três de cima</span></label>
+        <input id="conta-chave" type="password"
+               placeholder="${estado.temChave ? 'já guardada — digite para trocar' : 'nenhuma'}">
+
+        <label>Modelo <span class="form-hint">em branco usa o padrão</span></label>
+        ${modelos
+          ? `<input id="conta-modelo" list="modelos-ollama" value="${esc(estado.modeloIa)}">
+             <datalist id="modelos-ollama">${modelos}</datalist>`
+          : `<input id="conta-modelo" value="${esc(estado.modeloIa)}">`}
+
         <button id="conta-salvar">Salvar</button>
         <div class="form-hint">
-          Com uma chave de API configurada no servidor, ele faz a chamada sozinho
-          e nada disto é usado.
+          A chave fica <b>só nesta máquina</b>, nunca sobe para o servidor.
         </div>
       </div>
 
@@ -293,23 +306,20 @@ const Rastro = (() => {
       return el ? el.value.trim() : '';
     };
 
-    clique('conta-entrar', async () => {
-      try {
-        await RastroAPI.entrar({
-          servidor: valor('conta-servidor'),
-          email: valor('conta-email'),
-          senha: valor('conta-senha'),
-          convite: valor('conta-convite')
-        });
-        await recarregar(container, aoTerminar);
-      } catch (e) { erro = e.message; render(container, aoTerminar); }
+    clique('conta-sair', async () => {
+      await RastroAPI.sair();
+      window.location.reload();
     });
 
     clique('conta-salvar', async () => {
-      await RastroAPI.configurar({
-        preferido: valor('conta-preferido') || 'claudecode',
-        modelo: valor('conta-modelo') || null
-      });
+      const patch = {
+        provedorIa: valor('conta-provedor'),
+        modeloIa: valor('conta-modelo')
+      };
+      // Campo em branco quer dizer "não mexi na chave", não "apague a chave".
+      const chave = valor('conta-chave');
+      if (chave) patch.chaveIa = chave;
+      await RastroAPI.configurar(patch);
       await recarregar(container, aoTerminar);
     });
 

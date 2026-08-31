@@ -6,9 +6,13 @@
  * perguntar, montou o formato da resposta e vai validar o que voltar é o
  * backend — aqui é só o driver.
  *
- * Existe porque a VPS não alcança o `ollama` nem o `claude` da sua máquina. Com
- * uma chave de API configurada no servidor, nada disto roda: o backend chama o
- * modelo sozinho e o dispositivo nunca vê uma tarefa.
+ * Existe porque **o servidor não fala com modelo nenhum**. Ele monta a pergunta
+ * e enfileira; quem executa é sempre uma máquina do usuário, com o que ela
+ * tiver: o `claude` logado, um modelo no ollama, ou uma chave de API guardada
+ * localmente.
+ *
+ * A chave nunca sobe. Chave num servidor compartilhado é uma credencial a mais
+ * para vazar, para rotacionar e para pagar sem saber por quem.
  */
 const { execFile } = require('child_process');
 
@@ -93,6 +97,89 @@ async function viaClaudeCode(prompt, esquema) {
   return lerJson(saida);
 }
 
+// --------------------------------------------------------- chaves de API
+//
+// Os três falam JSON estruturado, cada um com o seu nome para a mesma ideia.
+// O Gemini é o que mais destoa: `responseSchema` é um subconjunto do OpenAPI e
+// não aceita `additionalProperties`, então o schema é podado antes de ir.
+
+async function viaAnthropic(prompt, esquema, chave, modelo) {
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': chave,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({
+      model: modelo || 'claude-haiku-4-5',
+      max_tokens: 8000,
+      output_config: { format: { type: 'json_schema', schema: JSON.parse(esquema) } },
+      messages: [{ role: 'user', content: prompt }]
+    }),
+    signal: AbortSignal.timeout(120000)
+  });
+  if (!r.ok) throw new Error(`anthropic respondeu ${r.status}`);
+  const corpo = await r.json();
+  const bloco = (corpo.content || []).find((b) => b.type === 'text');
+  if (!bloco) throw new Error('anthropic respondeu sem conteúdo');
+  return lerJson(bloco.text);
+}
+
+async function viaOpenai(prompt, esquema, chave, modelo) {
+  const r = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${chave}` },
+    body: JSON.stringify({
+      model: modelo || 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      response_format: {
+        type: 'json_schema',
+        json_schema: { name: 'classificacao', strict: true, schema: JSON.parse(esquema) }
+      }
+    }),
+    signal: AbortSignal.timeout(120000)
+  });
+  if (!r.ok) throw new Error(`openai respondeu ${r.status}`);
+  const corpo = await r.json();
+  return lerJson(corpo.choices?.[0]?.message?.content);
+}
+
+/** O Gemini recusa `additionalProperties`; podar é mais barato que outro schema. */
+function podarParaGemini(no) {
+  if (Array.isArray(no)) return no.map(podarParaGemini);
+  if (no && typeof no === 'object') {
+    const saida = {};
+    for (const [k, v] of Object.entries(no)) {
+      if (k === 'additionalProperties') continue;
+      saida[k] = podarParaGemini(v);
+    }
+    return saida;
+  }
+  return no;
+}
+
+async function viaGemini(prompt, esquema, chave, modelo) {
+  const nome = modelo || 'gemini-2.0-flash';
+  const r = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${nome}:generateContent?key=${encodeURIComponent(chave)}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: podarParaGemini(JSON.parse(esquema))
+        }
+      }),
+      signal: AbortSignal.timeout(120000)
+    });
+  if (!r.ok) throw new Error(`gemini respondeu ${r.status}`);
+  const corpo = await r.json();
+  return lerJson(corpo.candidates?.[0]?.content?.parts?.[0]?.text);
+}
+
 /** O modelo às vezes embrulha em cerca de markdown mesmo com schema fechado. */
 function lerJson(texto) {
   let limpo = (texto || '').trim();
@@ -102,17 +189,24 @@ function lerJson(texto) {
   return JSON.parse(limpo);
 }
 
+const COM_CHAVE = { anthropic: viaAnthropic, openai: viaOpenai, gemini: viaGemini };
+
 /**
- * Roda a tarefa no melhor executor disponível.
+ * Roda a tarefa com o que esta máquina tem.
  *
- * Claude Code primeiro: é mais capaz e não custa token extra. O ollama entra
- * quando ele não existe — ou quando o usuário preferir que o título nem chegue
- * a sair da máquina.
+ * Se há chave configurada, ela vence: foi escolha explícita do dono. Sem chave,
+ * cai no que existe na máquina — Claude Code antes do ollama, porque é mais
+ * capaz e não custa token extra.
  */
-async function executar({ prompt, esquema, preferido, modelo }) {
+async function executar({ prompt, esquema, provedor, chave, modelo, preferido }) {
+  if (chave && COM_CHAVE[provedor]) {
+    return COM_CHAVE[provedor](prompt, esquema, chave, modelo);
+  }
+
   const disponiveis = await capacidades();
-  const ordem = preferido && disponiveis.includes(preferido)
-    ? [preferido, ...disponiveis.filter((e) => e !== preferido)]
+  const escolhido = preferido || provedor;
+  const ordem = escolhido && disponiveis.includes(escolhido)
+    ? [escolhido, ...disponiveis.filter((e) => e !== escolhido)]
     : disponiveis;
 
   let ultimoErro = null;
@@ -124,7 +218,8 @@ async function executar({ prompt, esquema, preferido, modelo }) {
       ultimoErro = e;
     }
   }
-  throw ultimoErro || new Error('nenhum executor de IA disponível nesta máquina');
+  throw ultimoErro
+    || new Error('nenhuma IA disponível: instale o ollama, entre no Claude Code, ou configure uma chave');
 }
 
 module.exports = { executar, capacidades, modelosDoOllama };

@@ -33,13 +33,10 @@ am:
     convite: ${AM_CONVITE:}
     maximo-contas: ${AM_MAX_CONTAS:5}
   ia:
-    # `local` significa: o servidor NÃO chama modelo nenhum — ele enfileira o
-    # pedido e um dispositivo do usuário executa no ollama ou no claude da
-    # máquina dele. É o único provedor que a VPS não consegue cumprir sozinha.
-    provedor: ${AM_IA_PROVEDOR:local}
-    chave: ${AM_IA_CHAVE:}
-    modelo: ${AM_IA_MODELO:claude-haiku-4-5}
-    tempo-limite-segundos: ${AM_IA_TIMEOUT:120}
+    # O servidor não chama modelo nenhum: ele monta a pergunta e enfileira, e o
+    # dispositivo executa com o que tiver. Por isso não há provedor nem chave
+    # aqui — uma credencial a menos para vazar e para rotacionar.
+    #
     # Prazo da reserva de uma tarefa por um dispositivo. Máquina que desligou no
     # meio devolve a tarefa sozinha quando isto vence.
     reserva-minutos: ${AM_IA_RESERVA:10}

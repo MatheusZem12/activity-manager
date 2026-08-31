@@ -109,16 +109,10 @@ AM_PORTA_HOST=8091
 # --- imagem ---
 AM_TAG=hmg
 
-# --- IA ---
-# 'local' = o servidor NÃO chama modelo nenhum: ele monta a pergunta e um
-# dispositivo seu executa no ollama ou no claude da máquina. É o padrão, e o
-# único modo em que a VPS não precisa de chave.
-#
-# Para o servidor classificar sozinho, troque para anthropic/openai/gemini e
-# preencha AM_IA_CHAVE.
-AM_IA_PROVEDOR=local
-AM_IA_CHAVE=
-AM_IA_MODELO=claude-haiku-4-5
+# --- fila de classificação ---
+# NÃO há provedor nem chave de IA aqui, e é de propósito: o servidor não fala
+# com modelo nenhum. Quem executa é sempre uma máquina do usuário, com o que ela
+# tiver — e a chave, quando existe, fica lá.
 AM_IA_RESERVA=10
 
 # --- túnel (Cloudflare) ---

@@ -528,7 +528,23 @@ function renderClipMode() {
 
 // ---------- Painel de atividades (janela overlay) ----------
 
-function renderPanelMode() {
+/**
+ * O painel, ou a tela de entrada.
+ *
+ * Atividades e textos moram no banco: sem sessão, as abas seriam listas vazias
+ * que não salvam nada. Pedir o login de uma vez é mais honesto que deixar a
+ * pessoa descobrir sozinha.
+ */
+async function renderPanelMode() {
+  const estadoRastro = await RastroAPI.estado().catch(() => ({ temToken: false }));
+  if (!estadoRastro.temToken) {
+    await Login.render(appEl, async () => {
+      await API.getState().catch(() => {});
+      renderPanelMode();
+    });
+    return;
+  }
+
   appEl.innerHTML = `
     <div class="main-layout">
       <header class="topbar">
