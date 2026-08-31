@@ -933,3 +933,169 @@ html, body {
   gap: 12px;
   margin-top: 8px;
 }
+
+/* ---------- Aba Rastro ---------- */
+
+.rastro-estado {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 10px 0 14px;
+}
+
+.rastro-pisca {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+}
+.rastro-pisca.ok { background: var(--success); }
+.rastro-pisca.off { background: var(--text-muted); }
+
+.rastro-titulo {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 22px 0 10px;
+}
+
+.rastro-resumo {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+
+.rastro-cartoes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.rastro-cartao {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rastro-cartao span { font-size: 11px; color: var(--text-muted); }
+.rastro-cartao strong { font-size: 18px; }
+
+/* Não classificado com tempo é informação, não enfeite: o relatório que esconde
+   o que não sabe mente por omissão. */
+.rastro-cartao.alerta strong { color: var(--warning); }
+
+.rastro-barras { display: flex; flex-direction: column; gap: 8px; }
+
+.rastro-barra-topo {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 4px;
+  gap: 10px;
+}
+.rastro-barra-topo span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rastro-barra-valor { color: var(--text-muted); flex-shrink: 0; }
+
+.rastro-trilho {
+  height: 6px;
+  background: var(--surface-2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.rastro-preenchimento { height: 100%; border-radius: 3px; }
+
+.rastro-aviso {
+  background: var(--surface);
+  border-left: 3px solid var(--warning);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  margin-bottom: 14px;
+}
+.rastro-aviso.erro { border-left-color: var(--danger); }
+.rastro-erro { color: var(--danger); }
+
+.rastro-item {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 10px;
+}
+.rastro-item-topo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.rastro-item-topo code {
+  background: var(--surface-2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+.rastro-cor { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+.rastro-chave { color: var(--text-muted); margin-left: auto; }
+
+.rastro-nome, .rastro-descricao, .rastro-form input, .rastro-form select,
+.rastro-nova-regra input, .rastro-nova-regra select {
+  background: var(--surface-2);
+  border: none;
+  border-radius: 6px;
+  color: var(--text);
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 12px;
+  width: 100%;
+}
+.rastro-descricao { resize: vertical; line-height: 1.5; }
+
+.rastro-salvar, .rastro-form button, .rastro-nova-regra button {
+  background: var(--primary);
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  padding: 8px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  margin-top: 8px;
+}
+.rastro-salvar:hover, .rastro-form button:hover { background: var(--primary-hover); }
+.rastro-form button:disabled { background: var(--surface-2); cursor: not-allowed; }
+
+.rastro-apagar {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 18px;
+  margin-left: auto;
+  line-height: 1;
+}
+.rastro-apagar:hover { color: var(--danger); }
+
+.rastro-form { display: flex; flex-direction: column; gap: 6px; }
+.rastro-form label { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+
+.rastro-nova-regra {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 14px;
+}
+.rastro-nova-regra button { grid-column: 1 / -1; }
