@@ -1,45 +1,36 @@
-# O backend e o túnel.
 services:
   activity-backend:
     image: ghcr.io/matheuszem12/activity-manager-backend:${AM_TAG:-dev}
     container_name: activity-backend
     restart: unless-stopped
-    labels:
-      # O Watchtower desta VPS é quem atualiza este contêiner: push no branch
-      # publica a imagem, ele puxa e recria. É o deploy inteiro.
-      #
-      # O rótulo explícito funciona nos dois modos: se o Watchtower estiver com
-      # WATCHTOWER_LABEL_ENABLE=false (vigia tudo), ele é redundante; se estiver
-      # com true (vigia só quem pede), ele é obrigatório. Sem saber o modo, pôr
-      # o rótulo é a escolha que não quebra em nenhum dos dois.
-      com.centurylinklabs.watchtower.enable: "true"
     ports:
-      # Loopback: nada daqui é alcançável de fora sem o túnel. 8091 porque a
-      # 8080 é do finance e a 8090 do lingua nesta máquina.
+      # 8091 e nao 8090: a 8080 e do finance-backend e a 8090 do lingua-backend
+      # nesta maquina. Loopback, como o resto -- o acesso de fora e pelo tunel.
       - "127.0.0.1:${AM_PORTA_HOST:-8091}:8090"
     env_file:
       - .env
     environment:
-      # `postgres_activity` é o nome do CONTÊINER do outro compose, e 5432 é a
-      # porta de DENTRO dele — a 5434 do host não tem nada a ver com isto. Os
-      # dois se encontram pela rede activity-net.
-      AM_DB_URL: jdbc:postgresql://postgres_activity:5432/${AM_DB_NOME:-activity_manager}
-      # Fixa, e DEPOIS do env_file para vencer qualquer valor que caia lá. O
-      # env_file despeja o .env inteiro no contêiner, e a aplicação lê AM_PORTA
-      # para escolher a porta do Tomcat: com o mesmo nome nos dois lados, pôr
-      # 8091 no .env faria o servidor escutar em 8091 lá dentro enquanto o
+      # `postgres_activity` e o nome do CONTAINER do outro compose, e 5432 e a
+      # porta de DENTRO dele -- a 5434 do host nao tem nada a ver com isto. Os
+      # dois se encontram pela rede activity-net, externa aos dois.
+      AM_DB_URL: jdbc:postgresql://postgres_activity:5432/activity_manager
+      # Fixa, e DEPOIS do env_file para vencer qualquer valor que caia la. O
+      # env_file despeja o .env INTEIRO no container, e a aplicacao le AM_PORTA
+      # para escolher a porta do Tomcat: com o mesmo nome nos dois lados, por
+      # 8091 no .env faria o servidor escutar em 8091 la dentro enquanto o
       # mapeamento aponta para a 8090. Nada responderia, e o log diria
-      # "Started" — a pior combinação possível.
+      # "Started" -- a pior combinacao possivel.
       AM_PORTA: 8090
-    # A JVM roda com -XX:MaxRAMPercentage=75, e o percentual é sobre a memória
-    # que ela ENXERGA. Sem limite ela enxerga o host inteiro, numa máquina que
-    # também roda o finance e o lingua. Com o limite, os 75% valem sobre 600m.
+    # A JVM roda com -XX:MaxRAMPercentage=75 (Dockerfile), e esse percentual e
+    # sobre a memoria que ela ENXERGA. Sem limite aqui ela enxerga o host
+    # inteiro, numa maquina que tambem roda o finance e o lingua.
     #
-    # Este backend não faz nada pesado: sem Whisper, sem síntese de voz, sem
-    # processamento de mídia. É CRUD e agregação.
+    # 600m e menos que os 1200m do lingua porque aqui nao ha Whisper nem sintese
+    # de voz: e CRUD e agregacao.
     #
-    # memswap igual ao mem_limit = sem swap. O GC toca a heap inteira, então
-    # uma JVM em swap para de responder por minutos — indistinguível de queda.
+    # memswap igual a mem_limit = este container nao usa swap. Nao e descuido: o
+    # GC toca a heap inteira, entao uma JVM em swap para de responder por minutos
+    # -- indistinguivel de uma queda, so que mais dificil de diagnosticar.
     mem_limit: 600m
     memswap_limit: 600m
     healthcheck:
@@ -56,24 +47,20 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # ------------------------------------------------------------------ túnel
+  # ------------------------------------------------------------------ tunel
   #
-  # Só sobe com `docker compose --profile tunel up -d`. Desligado por padrão
-  # porque ele é a única peça que EXPÕE o serviço na internet.
+  # So sobe com `docker compose --profile tunel up -d`. Fica desligado por
+  # padrao porque ele e a unica peca que EXPOE o servico na internet.
   #
-  # Por que cloudflared e não abrir a 443: a VPS não precisa aceitar conexão
-  # nenhuma. O cloudflared abre uma conexão de SAÍDA até a Cloudflare e o
-  # tráfego volta por ela. Firewall fechado, TLS resolvido lá, e o IP da VPS
-  # não aparece em lugar nenhum.
+  # Por que cloudflared e nao abrir a porta 443: a VPS nao precisa aceitar
+  # conexao nenhuma de fora. O cloudflared abre uma conexao de SAIDA ate a
+  # Cloudflare e o trafego volta por ela. Firewall fechado, TLS resolvido la, e
+  # o IP da VPS nao aparece em lugar nenhum.
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: activity-tunel
     restart: unless-stopped
     profiles: [tunel]
-    labels:
-      # `latest` sem atualização automática envelhece calado. O cloudflared é um
-      # proxy sem estado: recriar não custa nada.
-      com.centurylinklabs.watchtower.enable: "true"
     command: tunnel --no-autoupdate run
     environment:
       TUNNEL_TOKEN: ${AM_TUNEL_TOKEN:?defina AM_TUNEL_TOKEN no .env}
@@ -88,11 +75,16 @@ services:
         max-size: "10m"
         max-file: "3"
 
-# NÃO há watchtower aqui, e é de propósito: o compose do finance nesta VPS já
-# roda um com WATCHTOWER_LABEL_ENABLE=false, que vigia TODOS os contêineres da
-# máquina — inclusive estes. Um segundo seria outro processo disputando o mesmo
-# /var/run/docker.sock, e os dois usariam `container_name: watchtower`.
+# NAO ha watchtower aqui, e e de proposito -- o mesmo motivo do lingua: o que ja
+# roda nesta VPS (no compose do finance-backend) esta com
+# WATCHTOWER_LABEL_ENABLE: false, ou seja, vigia TODOS os containers da maquina,
+# inclusive estes. Um segundo seria outro processo disputando o mesmo
+# /var/run/docker.sock, e os dois usam `container_name: watchtower`.
 
+# Rede compartilhada externa -- criada UMA vez fora deste compose
+# (docker network create activity-net) e usada tambem pelo container do Postgres
+# (postgres_activity). Por ser "external", este compose nao cria nem destroi a
+# rede; so se conecta a ela.
 networks:
   activity-net:
     external: true
