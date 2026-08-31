@@ -13,6 +13,7 @@ const shortcutManager = require('./src/main/shortcut-manager');
 const triggerServer = require('./src/main/trigger-server');
 const hypr = require('./src/main/hypr');
 const sound = require('./src/main/sound');
+const rastro = require('./src/main/rastro/ipc');
 const {
   WM_CLASS, QUICK_WINDOW_TITLE, CLIP_WINDOW_TITLE, PANEL_WINDOW_TITLE
 } = require('./src/main/window-identity');
@@ -307,12 +308,14 @@ function showNotification(activity) {
  * intervalo (`reminderMinutes`) — o alerta repete sozinho até a atividade ser
  * concluída, em vez de avisar uma vez só.
  */
-function fireActivityAlert(activity) {
+async function fireActivityAlert(activity) {
   showNotification(activity);
   sendToPanel('activity:alert', { id: activity.id });
 
+  // O alerta repete no mesmo intervalo até a atividade ser concluída: quem
+  // reagenda é o próprio disparo.
   const intervalMinutes = Math.max(1, activity.reminderMinutes || 15);
-  const rescheduled = activityStore.saveActivity({
+  const rescheduled = await activityStore.saveActivity({
     id: activity.id,
     dueAt: Date.now() + intervalMinutes * 60 * 1000
   });
@@ -376,6 +379,20 @@ if (!gotLock) {
 
     createTray();
 
+    // O coletor sobe junto com o app e não depende de o painel estar aberto —
+    // ele registra o dia todo, com a janela fechada. Se falhar (fora do
+    // Hyprland, por exemplo), o resto do app continua funcionando.
+    rastro.registrar({
+      aoMudar: () => { if (panelWindow) panelWindow.webContents.send('state:reload'); },
+      aoEntrarNaConta: () => carregarDoServidor()
+    });
+    rastro.iniciar();
+
+    // Atividades e textos vivem no banco. Sem sessão o app sobe do mesmo jeito
+    // — a bandeja, o coletor e as janelas rápidas funcionam — mas as duas listas
+    // ficam vazias até você entrar em Rastro → Conta.
+    await carregarDoServidor();
+
     // O atalho do compositor fala com o serviço por aqui — sem isso, cada
     // acionamento teria que subir um Electron novo.
     try {
@@ -422,11 +439,69 @@ if (!gotLock) {
   app.on('will-quit', () => {
     shortcutManager.unregisterAll();
     triggerServer.stop();
+    // Fecha o segmento aberto: sem isto, a última janela do dia — que costuma
+    // ser a mais longa — não entraria no arquivo.
+    rastro.parar();
   });
 
   app.on('window-all-closed', () => {
     // Mantém vivo na bandeja.
   });
+}
+
+/**
+ * Puxa atividades e textos do servidor para o espelho em memória.
+ *
+ * Na primeira vez com sessão, migra os JSON que o app usava antes — uma vez só,
+ * e o servidor recusa duplicata, então rodar de novo é inofensivo. Sem isto, a
+ * mudança para o banco custaria o histórico de quem já usava o app.
+ */
+async function carregarDoServidor() {
+  const apiClient = require('./src/main/storage/api-client');
+  if (!apiClient.configurado()) return;
+  try {
+    await migrarArquivosAntigos();
+    await activityStore.carregar();
+    await entryStore.carregar();
+    scheduler.cancelAll();
+    for (const activity of activityStore.getPending()) {
+      if (activity.dueAt && activity.dueAt > Date.now()) scheduleActivityNotification(activity);
+    }
+    updateTrayMenu();
+    sendToPanel('state:reload', buildState());
+  } catch (e) {
+    console.error('[dados] não consegui carregar do servidor:', e.message);
+  }
+}
+
+/** Move `activities.json` e `entries.json` para o banco e marca como migrados. */
+async function migrarArquivosAntigos() {
+  const fs = require('fs');
+  const marca = path.join(app.getPath('userData'), 'migrado-para-o-banco.json');
+  if (fs.existsSync(marca)) return;
+
+  const ler = (nome) => {
+    try {
+      return JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), nome), 'utf-8'));
+    } catch {
+      return null;
+    }
+  };
+
+  const resultado = {};
+  const atividades = ler('activities.json');
+  if (atividades && Array.isArray(atividades.activities) && atividades.activities.length) {
+    resultado.atividades = (await activityStore.importAll(atividades)).count;
+  }
+  const textos = ler('entries.json');
+  if (textos && Array.isArray(textos.entries) && textos.entries.length) {
+    resultado.textos = (await entryStore.importAll(textos)).count;
+  }
+
+  // Os arquivos NÃO são apagados: se algo der errado na primeira semana, o
+  // original ainda está lá. A marca é o que impede reimportar toda subida.
+  fs.writeFileSync(marca, JSON.stringify({ em: new Date().toISOString(), ...resultado }, null, 2));
+  console.log('[dados] migrado para o banco:', JSON.stringify(resultado));
 }
 
 // ---------- IPC ----------
@@ -441,9 +516,11 @@ function buildState() {
 
 ipcMain.handle('app:state', () => buildState());
 
-ipcMain.handle('activity:create', (_event, rawText) => {
+ipcMain.handle('activity:create', async (_event, rawText) => {
+  // O parsing de `#tag` e `!30` fica aqui, não no servidor: o preview ao vivo
+  // enquanto se digita exige que aconteça na máquina.
   const parsed = parser.parse(rawText, configStore.getConfig().defaultReminderMinutes);
-  const activity = activityStore.saveActivity({
+  const activity = await activityStore.saveActivity({
     text: parsed.text,
     tags: parsed.tags,
     reminderMinutes: parsed.reminderMinutes,
@@ -456,7 +533,7 @@ ipcMain.handle('activity:create', (_event, rawText) => {
   return activity;
 });
 
-ipcMain.handle('activity:update', (_event, { id, text }) => {
+ipcMain.handle('activity:update', async (_event, { id, text }) => {
   const current = activityStore.getActivity(id);
   if (!current) return null;
 
@@ -470,7 +547,7 @@ ipcMain.handle('activity:update', (_event, { id, text }) => {
     patch.dueAt = parsed.dueAt;
   }
 
-  const updated = activityStore.saveActivity(patch);
+  const updated = await activityStore.saveActivity(patch);
   if (!updated.completedAt && parsed.explicitReminder) {
     scheduleActivityNotification(updated);
   }
@@ -478,35 +555,31 @@ ipcMain.handle('activity:update', (_event, { id, text }) => {
   return updated;
 });
 
-ipcMain.handle('activity:snooze', (_event, { id, minutes }) => {
+ipcMain.handle('activity:snooze', async (_event, { id, minutes }) => {
   const current = activityStore.getActivity(id);
   if (!current || current.completedAt) return null;
 
   const mins = Math.max(1, parseInt(minutes, 10) || current.reminderMinutes || 15);
-  const updated = activityStore.saveActivity({ id, dueAt: Date.now() + mins * 60 * 1000 });
+  // Adiar mexe só no vencimento; o intervalo do `!N` continua o mesmo.
+  const updated = await activityStore.snoozeActivity(id, mins);
   scheduleActivityNotification(updated);
   sendToPanel('activity:updated', updated);
   return updated;
 });
 
-ipcMain.handle('activity:reopen', (_event, id) => {
+ipcMain.handle('activity:reopen', async (_event, id) => {
   const current = activityStore.getActivity(id);
   if (!current || !current.completedAt) return null;
 
-  const mins = current.reminderMinutes || 15;
-  const updated = activityStore.saveActivity({
-    id,
-    completedAt: null,
-    dueAt: Date.now() + mins * 60 * 1000
-  });
+  const updated = await activityStore.reopenActivity(id);
   scheduleActivityNotification(updated);
   updateTrayMenu();
   sendToPanel('activity:updated', updated);
   return updated;
 });
 
-ipcMain.handle('activity:complete', (_event, id) => {
-  const updated = activityStore.completeActivity(id);
+ipcMain.handle('activity:complete', async (_event, id) => {
+  const updated = await activityStore.completeActivity(id);
   if (updated) {
     scheduler.cancel(id);
     updateTrayMenu();
@@ -515,8 +588,8 @@ ipcMain.handle('activity:complete', (_event, id) => {
   return updated;
 });
 
-ipcMain.handle('activity:delete', (_event, id) => {
-  activityStore.deleteActivity(id);
+ipcMain.handle('activity:delete', async (_event, id) => {
+  await activityStore.deleteActivity(id);
   scheduler.cancel(id);
   updateTrayMenu();
   sendToPanel('activity:deleted', { id });
@@ -527,11 +600,11 @@ ipcMain.handle('activity:delete', (_event, id) => {
 
 ipcMain.handle('entries:list', () => entryStore.getAll());
 
-ipcMain.handle('entries:create', (_event, { title, content }) => {
+ipcMain.handle('entries:create', async (_event, { title, content }) => {
   const text = typeof content === 'string' ? content : '';
   if (!text.trim()) return null; // conteúdo é obrigatório
   const parsed = entryParser.parseTitle(title || '');
-  const entry = entryStore.saveEntry({
+  const entry = await entryStore.saveEntry({
     title: parsed.title,
     tags: parsed.tags,
     content: text
@@ -541,13 +614,13 @@ ipcMain.handle('entries:create', (_event, { title, content }) => {
   return entry;
 });
 
-ipcMain.handle('entries:update', (_event, { id, title, content }) => {
+ipcMain.handle('entries:update', async (_event, { id, title, content }) => {
   const current = entryStore.getEntry(id);
   if (!current) return null;
   const text = typeof content === 'string' ? content : '';
   if (!text.trim()) return current; // não deixa esvaziar o conteúdo
   const parsed = entryParser.parseTitle(title || '');
-  const updated = entryStore.saveEntry({
+  const updated = await entryStore.saveEntry({
     id,
     title: parsed.title,
     tags: parsed.tags,
@@ -557,18 +630,20 @@ ipcMain.handle('entries:update', (_event, { id, title, content }) => {
   return updated;
 });
 
-ipcMain.handle('entries:delete', (_event, id) => {
-  entryStore.deleteEntry(id);
+ipcMain.handle('entries:delete', async (_event, id) => {
+  await entryStore.deleteEntry(id);
   updateTrayMenu();
   broadcastEntries();
   return true;
 });
 
-ipcMain.handle('entries:copy', (_event, id) => {
+ipcMain.handle('entries:copy', async (_event, id) => {
   const entry = entryStore.getEntry(id);
   if (!entry) return null;
+  // O clipboard é do sistema: copiar acontece aqui, e o servidor só registra
+  // que aconteceu — é o que alimenta a ordenação por "Copiados".
   clipboard.writeText(entry.content);
-  const updated = entryStore.markCopied(id);
+  const updated = await entryStore.markCopied(id);
   broadcastEntries();
   return updated;
 });
@@ -627,12 +702,12 @@ ipcMain.handle('backup:import', async () => {
   if (canceled || filePaths.length === 0) return null;
   const content = require('fs').readFileSync(filePaths[0], 'utf-8');
   const imported = JSON.parse(content);
-  const result = activityStore.importAll(imported);
+  const result = await activityStore.importAll(imported);
 
   // `entries` só existe nos backups do app já com clipboard — sem a chave,
   // preserva o que está salvo em vez de apagar tudo.
   if (Array.isArray(imported.entries)) {
-    const entryResult = entryStore.importAll({ version: imported.version, entries: imported.entries });
+    const entryResult = await entryStore.importAll({ version: imported.version, entries: imported.entries });
     result.entryCount = entryResult.count;
   }
 
