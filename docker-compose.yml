@@ -1,0 +1,58 @@
+# O backend do Activity Manager: banco e API.
+#
+# O app de desktop **não está aqui** e não precisa disto para funcionar. Ele
+# grava local primeiro e sincroniza depois; sem contêiner nenhum, atividades,
+# textos e rastreio continuam funcionando na sua máquina. O Compose só entra
+# quando você quiser juntar dois computadores e o celular na mesma conta.
+#
+# Nome de projeto fixo — sem ele o Compose usa o nome do diretório e os volumes
+# colidem com os de qualquer outro projeto chamado "activity-manager" por aí.
+name: activity-manager
+
+services:
+  banco:
+    # 16, a mesma do Lingua e a mesma da VPS. Divergência de major é silenciosa
+    # até o dia em que importa: `pg_dump` de uma major mais nova NÃO restaura
+    # numa mais antiga, e isso só aparece na hora de mover o dado.
+    image: postgres:16
+    container_name: activity-manager-banco
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${AM_DB_NOME:-activity_manager}
+      POSTGRES_USER: ${AM_DB_USER:-activity}
+      POSTGRES_PASSWORD: ${AM_DB_SENHA:-activity}
+    ports:
+      # 5434 no host: o 5432 costuma estar ocupado e o 5433 já é do Lingua.
+      # Dentro da rede do compose continua 5432.
+      - "${AM_DB_PORTA:-5434}:5432"
+    volumes:
+      - activity-manager-banco:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AM_DB_USER:-activity} -d ${AM_DB_NOME:-activity_manager}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./backend
+    container_name: activity-manager-api
+    restart: unless-stopped
+    depends_on:
+      banco:
+        condition: service_healthy
+    environment:
+      # jdbc:postgresql:// e não postgres:// — o driver JDBC recusa a segunda
+      # forma, e o erro que ele dá ("No suitable driver") não diz isso.
+      AM_DB_URL: jdbc:postgresql://banco:5432/${AM_DB_NOME:-activity_manager}
+      AM_DB_USER: ${AM_DB_USER:-activity}
+      AM_DB_SENHA: ${AM_DB_SENHA:-activity}
+      AM_JWT_SEGREDO: ${AM_JWT_SEGREDO}
+      AM_CONVITE: ${AM_CONVITE}
+      AM_JWT_DIAS: ${AM_JWT_DIAS:-30}
+      AM_MAX_CONTAS: ${AM_MAX_CONTAS:-5}
+      AM_LOG: ${AM_LOG:-INFO}
+    ports:
+      - "${AM_PORTA:-8090}:8090"
+
+volumes:
+  activity-manager-banco:
