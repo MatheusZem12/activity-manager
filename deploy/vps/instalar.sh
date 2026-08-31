@@ -15,6 +15,9 @@
 # as sessões dos seus aparelhos.
 set -euo pipefail
 
+# ~/activity-manager, e não junto do lingua em ~/sevices: são projetos
+# independentes, com bancos, redes e ciclos de atualização separados. AM_RAIZ
+# existe como escape, não como recomendação.
 RAIZ="${AM_RAIZ:-$HOME/activity-manager}"
 REDE="activity-net"
 
@@ -324,7 +327,6 @@ azul "6. Pronto até aqui"
 cat <<RESUMO
 
   Estrutura:   ${RAIZ}/{postgres,service}
-               (para outro lugar: AM_RAIZ=~/sevices/activity-manager bash instalar.sh)
   Banco:       127.0.0.1:${PORTA_DB}  (só a própria VPS enxerga)
   Convite:     ${CONVITE}
                ↑ você vai digitar isto uma vez em cada dispositivo
