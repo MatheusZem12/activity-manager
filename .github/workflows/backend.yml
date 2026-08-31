@@ -7,9 +7,12 @@ name: backend
 
 on:
   push:
-    # Uma tag por branch: `dev` publica :dev, `main` publica :main. A VPS
-    # escolhe qual usa pelo AM_TAG do .env — homologar não mexe no que está no ar.
-    branches: [main, dev]
+    # `dev` NÃO dispara nada, igual ao lingua: é onde se trabalha. O que sobe
+    # para a VPS é `hmg` — o merge é o ato deliberado de publicar.
+    #
+    # Uma tag por branch: hmg publica :hmg, main publica :main. A VPS escolhe
+    # qual usa pelo AM_TAG do .env, então homologar não mexe no que está no ar.
+    branches: [hmg, main]
     paths:
       - 'backend/**'
       - '.github/workflows/backend.yml'

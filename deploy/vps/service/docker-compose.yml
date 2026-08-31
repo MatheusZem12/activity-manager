@@ -1,6 +1,6 @@
 services:
   activity-backend:
-    image: ghcr.io/matheuszem12/activity-manager-backend:${AM_TAG:-dev}
+    image: ghcr.io/matheuszem12/activity-manager-backend:${AM_TAG:-hmg}
     container_name: activity-backend
     restart: unless-stopped
     ports:

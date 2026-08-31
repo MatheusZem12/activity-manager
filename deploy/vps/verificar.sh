@@ -41,18 +41,20 @@ esac
 
 # ------------------------------------------------------------------- 3. imagem
 passo "3. Imagem no GHCR"
-if docker pull -q "${IMAGEM}:dev" >/dev/null 2>&1; then
-  ok "${IMAGEM}:dev disponível"
+if docker pull -q "${IMAGEM}:hmg" >/dev/null 2>&1; then
+  ok "${IMAGEM}:hmg disponível"
 else
-  falha "não consegui puxar ${IMAGEM}:dev"
+  falha "não consegui puxar ${IMAGEM}:hmg"
   cat <<'DICA'
 
     Duas causas possíveis, nesta ordem:
 
     1) A imagem ainda não foi publicada. NO SEU PC:
-           git push
+           git checkout hmg && git merge dev && git push
        e acompanhe em github.com/MatheusZem12/activity-manager/actions
        até o job `backend` ficar verde (leva ~3 min na primeira vez).
+
+       Push em `dev` NÃO publica nada: quem sobe para a VPS é `hmg`.
 
     2) A VPS não está autenticada no GHCR. O pacote nasce privado:
            echo "SEU_TOKEN" | docker login ghcr.io -u matheuszem12 --password-stdin

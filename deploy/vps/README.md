@@ -42,9 +42,13 @@ O `instalar.sh` é **um arquivo só e autossuficiente** — os dois composes est
 embutidos nele. Na VPS você não tem o repositório, e levar uma árvore de
 diretórios por `scp` é justamente o passo em que dá errado.
 
+**A branch que sobe é `hmg`, não `dev`.** Igual ao lingua: `dev` é onde se
+trabalha e não publica imagem nenhuma; o merge em `hmg` é o ato deliberado de
+publicar.
+
 ```bash
-# 1. NA SUA MÁQUINA (onde o repositório está): publica a imagem
-git push
+# 1. NA SUA MÁQUINA: publica a imagem
+git checkout hmg && git merge dev && git push
 
 # 2. NA SUA MÁQUINA: manda só o script.
 #    Troque root@SEU-IP pelo endereço real da VPS — não é literal.
@@ -116,6 +120,22 @@ docker logs -f activity-tunel          # espere "Registered tunnel connection"
 
 O perfil `tunel` fica desligado por padrão porque ele é a **única** peça que
 expõe o serviço na internet.
+
+## Recomeçar do zero
+
+```bash
+scp deploy/vps/limpar.sh root@SEU-IP:~/     # no seu PC
+bash ~/limpar.sh                            # na VPS — pede confirmação
+bash ~/instalar.sh
+```
+
+Apaga contêineres, volumes, rede e a pasta inteira — inclusive os `.env`. O
+convite e o segredo do JWT são regerados, então as sessões dos aparelhos morrem
+e você entra de novo em cada um.
+
+Cada nome no script é literal e do activity-manager: não há `prune`, nem filtro
+por padrão, nem `-a`. Um `docker system prune` levaria junto imagem e volume do
+lingua e do finance.
 
 ## Testar
 
