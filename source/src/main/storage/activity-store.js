@@ -1,147 +1,143 @@
-/**
- * As atividades — agora no banco, não em arquivo.
- *
- * O dono do dado é o backend. Este arquivo é um **espelho**: guarda em memória
- * o que o servidor devolveu, para que as leituras continuem síncronas e o
- * renderer não precise saber que algo mudou. Escrita vai para a API e só então
- * atualiza o espelho — o banco decide, o espelho reflete.
- *
- * A tradução de nomes acontece aqui de propósito. A API fala `texto`,
- * `alertaMin`, `venceEm`; o renderer fala `text`, `reminderMinutes`, `dueAt`.
- * Trocar o vocabulário de 1600 linhas de tela para renomear cinco campos seria
- * um risco sem retorno.
- */
-const api = require('./api-client');
+const { app } = require('electron');
+const fs = require('fs');
+const path = require('path');
 
-let espelho = [];
-let carregado = false;
+const STATE_FILE = 'activities.json';
 
-/** Da forma da API para a forma que a tela conhece. */
-function daApi(a) {
+function statePath() {
+  return path.join(app.getPath('userData'), STATE_FILE);
+}
+
+function genId() {
+  return `act_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function defaultState() {
+  return { version: 1, activities: [] };
+}
+
+function normalizeActivity(raw = {}) {
   return {
-    id: a.id,
-    text: a.texto,
-    tags: a.tags || [],
-    reminderMinutes: a.alertaMin || 30,
-    dueAt: a.venceEm ? Date.parse(a.venceEm) : null,
-    createdAt: Date.parse(a.criadaEm),
-    completedAt: a.concluidaEm ? Date.parse(a.concluidaEm) : null
+    id: raw.id || genId(),
+    text: (raw.text || '').trim(),
+    tags: Array.isArray(raw.tags) ? raw.tags.map((t) => String(t).trim().toLowerCase()) : [],
+    reminderMinutes: Math.max(1, parseInt(raw.reminderMinutes, 10) || 1),
+    dueAt: typeof raw.dueAt === 'number' ? raw.dueAt : Date.now(),
+    createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : Date.now(),
+    completedAt: raw.completedAt || null
   };
 }
 
-function paraApi(patch) {
-  const corpo = {};
-  if (patch.text !== undefined) corpo.texto = patch.text;
-  if (patch.tags !== undefined) corpo.tags = patch.tags;
-  if (patch.reminderMinutes !== undefined) corpo.alertaMin = patch.reminderMinutes;
-  if (patch.dueAt !== undefined && patch.dueAt !== null) corpo.venceEm = new Date(patch.dueAt).toISOString();
-  if (patch.createdAt !== undefined) corpo.criadaEm = new Date(patch.createdAt).toISOString();
-  return corpo;
+// O arquivo só é tocado por este processo, então dá para ler uma vez e
+// trabalhar em memória; o disco é atualizado a cada gravação.
+let cache = null;
+
+function loadState() {
+  if (cache) return cache;
+  try {
+    const data = JSON.parse(fs.readFileSync(statePath(), 'utf-8'));
+    cache = {
+      version: data.version || 1,
+      activities: Array.isArray(data.activities) ? data.activities.map(normalizeActivity) : []
+    };
+  } catch {
+    cache = defaultState();
+  }
+  return cache;
 }
 
-/** Puxa tudo do servidor. Chamado na subida e depois de cada escrita. */
-async function carregar() {
-  const { atividades } = await api.pedir('/atividades');
-  espelho = atividades.map(daApi);
-  carregado = true;
-  return espelho;
+function saveState(state) {
+  cache = state;
+  fs.writeFileSync(statePath(), JSON.stringify(state, null, 2), 'utf-8');
+  return state;
 }
-
-function pronto() {
-  return carregado;
-}
-
-// ------------------------------------------------------- leituras (síncronas)
 
 function getAll() {
-  return espelho;
+  return loadState().activities;
 }
 
 function getPending() {
-  return espelho.filter((a) => !a.completedAt);
+  return getAll().filter((a) => !a.completedAt);
 }
 
 function getCompleted() {
-  return espelho.filter((a) => a.completedAt);
+  return getAll().filter((a) => a.completedAt);
 }
 
 function getActivity(id) {
-  return espelho.find((a) => a.id === id) || null;
+  return loadState().activities.find((a) => a.id === id) || null;
 }
 
-function exportAll() {
-  return { version: 2, activities: espelho };
+function saveActivity(patch) {
+  const state = loadState();
+  const index = patch.id ? state.activities.findIndex((a) => a.id === patch.id) : -1;
+
+  let saved;
+  if (index === -1) {
+    saved = normalizeActivity(patch);
+    state.activities.unshift(saved);
+  } else {
+    saved = normalizeActivity({ ...state.activities[index], ...patch, id: state.activities[index].id });
+    state.activities[index] = saved;
+  }
+
+  saveState(state);
+  return saved;
 }
 
-// ------------------------------------------------------- escritas (assíncronas)
-
-async function saveActivity(patch) {
-  const salva = patch.id
-    ? await api.pedir(`/atividades/${patch.id}`, { metodo: 'PATCH', corpo: paraApi(patch) })
-    : await api.pedir('/atividades', { metodo: 'POST', corpo: paraApi(patch) });
-  await carregar();
-  return daApi(salva);
+function completeActivity(id) {
+  const state = loadState();
+  const index = state.activities.findIndex((a) => a.id === id);
+  if (index === -1) return null;
+  state.activities[index].completedAt = Date.now();
+  saveState(state);
+  return state.activities[index];
 }
 
-async function snoozeActivity(id, minutos) {
-  const salva = await api.pedir(`/atividades/${id}/adiar`, { metodo: 'POST', corpo: { minutos } });
-  await carregar();
-  return daApi(salva);
+/** Adiar mexe só no vencimento; o intervalo do `!N` continua o mesmo. */
+function snoozeActivity(id, minutes) {
+  if (!getActivity(id)) return null;
+  return saveActivity({ id, dueAt: Date.now() + minutes * 60 * 1000 });
 }
 
-async function completeActivity(id) {
-  const salva = await api.pedir(`/atividades/${id}/concluir`, { metodo: 'POST' });
-  await carregar();
-  return daApi(salva);
+/** Reabrir volta para pendente e recomeça a contagem do alerta a partir de agora. */
+function reopenActivity(id) {
+  const current = getActivity(id);
+  if (!current) return null;
+  return saveActivity({ id, completedAt: null, dueAt: Date.now() + current.reminderMinutes * 60 * 1000 });
 }
 
-async function reopenActivity(id) {
-  const salva = await api.pedir(`/atividades/${id}/reabrir`, { metodo: 'POST' });
-  await carregar();
-  return daApi(salva);
-}
-
-async function deleteActivity(id) {
-  await api.pedir(`/atividades/${id}`, { metodo: 'DELETE' });
-  await carregar();
+function deleteActivity(id) {
+  const state = loadState();
+  state.activities = state.activities.filter((a) => a.id !== id);
+  saveState(state);
   return true;
 }
 
-/**
- * Importa um backup — e é também o caminho do JSON antigo para o banco.
- *
- * O servidor recusa duplicata por (texto, instante de criação), então rodar duas
- * vezes não multiplica nada.
- */
-async function importAll(data) {
+function exportAll() {
+  return loadState();
+}
+
+function importAll(data) {
   if (!data || !Array.isArray(data.activities)) {
     throw new Error('Arquivo de backup inválido.');
   }
-  const lote = data.activities.map((a) => ({
-    texto: a.text,
-    tags: a.tags || [],
-    alertaMin: a.reminderMinutes || 30,
-    venceEm: a.dueAt ? new Date(a.dueAt).toISOString() : null,
-    criadaEm: new Date(a.createdAt || Date.now()).toISOString(),
-    // Sem isto o estado se perde e tudo volta como pendente: uma lista de
-    // "coisas a fazer" que reaparece cheia de coisas já feitas.
-    concluidaEm: a.completedAt ? new Date(a.completedAt).toISOString() : null
-  }));
-  const r = await api.pedir('/atividades/importar', { metodo: 'POST', corpo: lote });
-  await carregar();
-  return { count: r.importadas };
+  const state = {
+    version: data.version || 1,
+    activities: data.activities.map(normalizeActivity)
+  };
+  saveState(state);
+  return { count: state.activities.length };
 }
 
 module.exports = {
-  carregar,
-  pronto,
   getAll,
   getPending,
   getCompleted,
   getActivity,
   saveActivity,
-  snoozeActivity,
   completeActivity,
+  snoozeActivity,
   reopenActivity,
   deleteActivity,
   exportAll,

@@ -51,24 +51,3 @@ contextBridge.exposeInMainWorld('activityAPI', {
   }
 });
 
-/**
- * O Rastro fala por um canal próprio.
- *
- * Separado de `activityAPI` porque é outro domínio — e porque quase tudo aqui é
- * repasse para o backend. A tela do Rastro não decide nada: pede e exibe.
- */
-contextBridge.exposeInMainWorld('RastroAPI', {
-  estado: () => ipcRenderer.invoke('rastro:estado'),
-  local: (data) => ipcRenderer.invoke('rastro:local', data),
-  relatorio: (de, ate) => ipcRenderer.invoke('rastro:relatorio', { de, ate }),
-  serie: (de, ate) => ipcRenderer.invoke('rastro:serie', { de, ate }),
-  categorias: () => ipcRenderer.invoke('rastro:categorias'),
-  regras: () => ipcRenderer.invoke('rastro:regras'),
-  salvarCategoria: (id, dados) => ipcRenderer.invoke('rastro:salvarCategoria', { id, dados }),
-  salvarRegra: (id, dados) => ipcRenderer.invoke('rastro:salvarRegra', { id, dados }),
-  apagarRegra: (id) => ipcRenderer.invoke('rastro:apagarRegra', id),
-  entrar: (dados) => ipcRenderer.invoke('rastro:entrar', dados),
-  sair: () => ipcRenderer.invoke('rastro:sair'),
-  configurar: (patch) => ipcRenderer.invoke('rastro:configurar', patch),
-  sincronizar: () => ipcRenderer.invoke('rastro:sincronizar')
-});

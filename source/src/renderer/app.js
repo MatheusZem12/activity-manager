@@ -528,23 +528,7 @@ function renderClipMode() {
 
 // ---------- Painel de atividades (janela overlay) ----------
 
-/**
- * O painel, ou a tela de entrada.
- *
- * Atividades e textos moram no banco: sem sessão, as abas seriam listas vazias
- * que não salvam nada. Pedir o login de uma vez é mais honesto que deixar a
- * pessoa descobrir sozinha.
- */
-async function renderPanelMode() {
-  const estadoRastro = await RastroAPI.estado().catch(() => ({ temToken: false }));
-  if (!estadoRastro.temToken) {
-    await Login.render(appEl, async () => {
-      await API.getState().catch(() => {});
-      renderPanelMode();
-    });
-    return;
-  }
-
+function renderPanelMode() {
   appEl.innerHTML = `
     <div class="main-layout">
       <header class="topbar">
@@ -555,7 +539,6 @@ async function renderPanelMode() {
         <nav class="nav">
           <button data-screen="dashboard" class="${currentScreen === 'dashboard' ? 'active' : ''}">Atividades</button>
           <button data-screen="clipboard" class="${currentScreen === 'clipboard' ? 'active' : ''}">Clipboard</button>
-          <button data-screen="rastro" class="${currentScreen === 'rastro' ? 'active' : ''}">Rastro</button>
           <button data-screen="settings" class="${currentScreen === 'settings' ? 'active' : ''}">Configurações</button>
         </nav>
       </header>
@@ -570,7 +553,6 @@ async function renderPanelMode() {
       editingEntryId = null;
       settingsTab = 'geral';
       settingsDraft = null;
-      if (currentScreen === 'rastro') Rastro.invalidar();
       renderPanelMode();
     });
   });
@@ -584,8 +566,6 @@ function renderScreen() {
   if (!content) return;
   if (currentScreen === 'dashboard') renderDashboard(content);
   else if (currentScreen === 'clipboard') renderClipboardScreen(content);
-  // A aba Rastro se desenha sozinha e é assíncrona: os dados vêm do backend.
-  else if (currentScreen === 'rastro') Rastro.render(content, () => renderScreen());
   else if (currentScreen === 'settings') renderSettings(content);
 }
 
@@ -1145,13 +1125,10 @@ function wireEntryEditInputs() {
 
 // ---------- Configurações ----------
 
-// Conta e IA vieram da aba Rastro: são configuração, e configuração mora em
-// Configurações. Notificações e Volume viraram uma só — as duas falavam do
-// mesmo alerta, e separar obrigava a ir e voltar para ajustar uma coisa.
+// Notificações e Volume viraram uma só — as duas falavam do mesmo alerta, e
+// separar obrigava a ir e voltar para ajustar uma coisa.
 const SETTINGS_TABS = [
   { key: 'geral', label: 'Geral' },
-  { key: 'conta', label: 'Conta' },
-  { key: 'ia', label: 'IA' },
   { key: 'atalhos', label: 'Atalhos' },
   { key: 'alertas', label: 'Alertas' }
 ];
@@ -1185,17 +1162,8 @@ function renderSettings(container) {
 
   const body = document.getElementById('settings-tab-body');
   if (settingsTab === 'geral') renderGeneralTab(body);
-  else if (settingsTab === 'conta') renderAccountTab(body);
-  else if (settingsTab === 'ia') renderIaTab(body);
   else if (settingsTab === 'atalhos') renderShortcutsTab(body);
   else if (settingsTab === 'alertas') renderAlertsTab(body);
-
-  // Conta e IA salvam sozinhas, cada ação no seu botão. Um "Salvar
-  // configurações" no rodapé delas não faria nada — e botão que não faz nada
-  // ensina a desconfiar dos que fazem.
-  const RASCUNHO = ['geral', 'atalhos', 'alertas'];
-  document.getElementById('settings-footer').classList
-    .toggle('oculto', !RASCUNHO.includes(settingsTab));
 
   document.getElementById('btn-save-cfg').addEventListener('click', async () => {
     const saveBtn = document.getElementById('btn-save-cfg');
@@ -1230,10 +1198,7 @@ function renderSettings(container) {
  * A aba Geral.
  *
  * Agrupada por assunto e não por campo solto: "Atividades" e "Clipboard" são as
- * duas coisas que se configura aqui, e cada uma tem os seus números. O que saiu
- * daqui saiu por bons motivos — o lado do painel virou botão no cabeçalho
- * (decisão que se toma olhando, não lendo), e o backup sumiu porque os dados
- * moram num banco com conta e sincronização.
+ * duas coisas que se configura aqui, e cada uma tem os seus números.
  */
 function renderGeneralTab(body) {
   body.innerHTML = `
@@ -1279,7 +1244,7 @@ function renderGeneralTab(body) {
         <input type="checkbox" id="cfg-autostart" ${settingsDraft.startOnLogin ? 'checked' : ''}>
         <span>
           Iniciar junto com o sistema
-          <em>O coletor só registra o seu dia se o app estiver rodando.</em>
+          <em>Os alertas só chegam com o app rodando.</em>
         </span>
       </label>
     </div>
@@ -1298,180 +1263,6 @@ function renderGeneralTab(body) {
     settingsDraft.startOnLogin = e.target.checked;
   });
 
-}
-
-/**
- * A conta: com quem este app está falando, e como sair.
- *
- * Não há campo de servidor. O endereço é constante — ele não é preferência do
- * usuário, é onde o app vive, e campo editável só criava uma forma de digitar
- * errado e ficar sem sincronizar sem saber por quê.
- */
-async function renderAccountTab(body) {
-  body.innerHTML = '<p class="empty-hint">Carregando…</p>';
-  const e = await RastroAPI.estado();
-
-  body.innerHTML = `
-    <div class="cfg-secao">
-      <h4 class="cfg-titulo">Conectado</h4>
-      <div class="cfg-par"><span>Servidor</span><code>${escapeHtml(e.servidor.replace(/^https?:\/\//, ''))}</code></div>
-      <div class="cfg-par"><span>Este dispositivo</span><code>${escapeHtml(e.dispositivo)}</code></div>
-      <div class="cfg-par">
-        <span>Sincronização</span>
-        <code>${e.sincronizando ? 'a cada 5 min' : 'parada'}</code>
-      </div>
-      ${e.ultimoErro ? `<p class="cfg-nota erro">${escapeHtml(e.ultimoErro)}</p>` : ''}
-      <button class="btn btn-secondary btn-inline" id="btn-sync">Sincronizar agora</button>
-    </div>
-
-    <div class="cfg-secao">
-      <h4 class="cfg-titulo">Sair</h4>
-      <p class="cfg-nota">
-        Sair apaga só a sessão desta máquina. Atividades, textos e segmentos
-        continuam no servidor, e os segmentos ainda não enviados ficam no disco
-        esperando você entrar de novo.
-      </p>
-      <button class="btn btn-secondary btn-inline" id="btn-sair">Sair desta máquina</button>
-    </div>
-  `;
-
-  document.getElementById('btn-sync').addEventListener('click', async (ev) => {
-    // ANTES do await: `currentTarget` só existe durante o despacho do evento.
-    // Depois dele é null, o `finally` lança, e o botão trava em "carregando".
-    const botao = ev.currentTarget;
-    botao.disabled = true;
-    botao.textContent = 'Sincronizando…';
-    try {
-      await RastroAPI.sincronizar();
-      toast('Sincronizado');
-    } catch (err) {
-      toast(err.message);
-    }
-    renderAccountTab(body);
-  });
-
-  document.getElementById('btn-sair').addEventListener('click', async () => {
-    await RastroAPI.sair();
-    window.location.reload();
-  });
-}
-
-/**
- * De onde vem a inteligência que classifica o seu dia.
- *
- * O servidor não fala com modelo nenhum: ele monta a pergunta e espera. Quem
- * executa é ESTA máquina — e por isso a escolha é daqui, não de lá. A chave,
- * quando existe, nunca sobe: chave num servidor compartilhado é uma credencial
- * a mais para vazar, rotacionar e pagar sem saber por quem.
- */
-async function renderIaTab(body) {
-  body.innerHTML = '<p class="empty-hint">Carregando…</p>';
-  const e = await RastroAPI.estado();
-
-  const temClaude = e.executores.includes('claudecode');
-  const temOllama = e.executores.includes('ollama');
-
-  // Sem escolha salva, o executor cai no primeiro disponível — e a tela precisa
-  // dizer QUAL, senão mostra cinco opções apagadas enquanto uma delas está
-  // classificando o dia inteiro. Preferência ausente não é ausência de resposta.
-  const automatico = !e.provedorIa;
-  const atual = e.provedorIa || e.executores[0] || '';
-
-  const opcao = (valor, rotulo, nota, disponivel) => `
-    <label class="cfg-opcao ${atual === valor ? 'ativa' : ''} ${disponivel === false ? 'indisponivel' : ''}">
-      <input type="radio" name="ia-provedor" value="${valor}" ${atual === valor ? 'checked' : ''}>
-      <span>
-        ${rotulo}
-        <em>${nota}</em>
-      </span>
-    </label>`;
-
-  body.innerHTML = `
-    <div class="cfg-secao">
-      <h4 class="cfg-titulo">Nesta máquina</h4>
-      ${automatico && atual ? '<div class="form-hint">Nada escolhido ainda — está usando o primeiro que respondeu nesta máquina. Salvar fixa a escolha.</div>' : ''}
-      ${opcao('claudecode', 'Claude Code',
-              temClaude ? 'Usa a assinatura já logada aqui. Sem chave, sem custo por token.'
-                        : 'Não detectado — o comando <code>claude</code> não está no PATH.', temClaude)}
-      ${opcao('ollama', 'Ollama',
-              temOllama ? `Local: o título da janela não sai da máquina. ${e.modelosOllama.length} modelo(s) baixado(s).`
-                        : 'Não detectado — o Ollama não respondeu em localhost:11434.', temOllama)}
-    </div>
-
-    <div class="cfg-secao">
-      <h4 class="cfg-titulo">Por chave de API</h4>
-      ${opcao('anthropic', 'Anthropic', 'Claude pela API. Cobrado por token.')}
-      ${opcao('openai', 'OpenAI', 'GPT pela API. Cobrado por token.')}
-      ${opcao('gemini', 'Google Gemini', 'Gemini pela API. Cobrado por token.')}
-
-      <div class="form-group" id="ia-chave-bloco">
-        <label>Chave</label>
-        <input type="password" id="ia-chave"
-               placeholder="${e.temChave ? 'já guardada — digite para trocar' : 'cole a chave aqui'}">
-        <div class="form-hint">
-          Fica <b>só nesta máquina</b>, num arquivo com permissão 600. Nunca sobe
-          para o servidor e não entra em backup nenhum.
-        </div>
-      </div>
-    </div>
-
-    <div class="cfg-secao">
-      <h4 class="cfg-titulo">Modelo</h4>
-      <input type="text" id="ia-modelo" value="${escapeHtml(e.modeloIa || '')}"
-             list="ia-modelos" placeholder="em branco usa o padrão de cada provedor">
-      <datalist id="ia-modelos">
-        ${e.modelosOllama.map((m) => `<option value="${escapeHtml(m)}">`).join('')}
-        <option value="claude-haiku-4-5">
-        <option value="gpt-4o-mini">
-        <option value="gemini-2.0-flash">
-      </datalist>
-      <div class="form-hint">
-        Modelo pequeno erra em título ambíguo. Quando errar, uma regra em
-        <b>Rastro → Regras</b> resolve de vez e vale para o histórico inteiro.
-      </div>
-    </div>
-
-    <button class="btn" id="btn-salvar-ia">Salvar</button>
-  `;
-
-  const bloco = document.getElementById('ia-chave-bloco');
-  const comChave = () => ['anthropic', 'openai', 'gemini']
-    .includes(document.querySelector('input[name="ia-provedor"]:checked')?.value);
-
-  const atualizar = () => {
-    bloco.classList.toggle('oculto', !comChave());
-    body.querySelectorAll('.cfg-opcao').forEach((el) => {
-      el.classList.toggle('ativa', el.querySelector('input').checked);
-    });
-  };
-  atualizar();
-  body.querySelectorAll('input[name="ia-provedor"]').forEach((r) => {
-    r.addEventListener('change', atualizar);
-  });
-
-  document.getElementById('btn-salvar-ia').addEventListener('click', async (ev) => {
-    const patch = {
-      provedorIa: document.querySelector('input[name="ia-provedor"]:checked')?.value || '',
-      modeloIa: document.getElementById('ia-modelo').value.trim()
-    };
-    // Campo em branco quer dizer "não mexi na chave", não "apague a chave".
-    const chave = document.getElementById('ia-chave').value.trim();
-    if (chave) patch.chaveIa = chave;
-
-    // ANTES do await: `currentTarget` só existe durante o despacho do evento.
-    // Depois dele é null, o `finally` lança, e o botão trava em "carregando".
-    const botao = ev.currentTarget;
-    botao.disabled = true;
-    try {
-      await RastroAPI.configurar(patch);
-      toast('Configuração de IA salva');
-    } catch (err) {
-      toast(err.message);
-      botao.disabled = false;
-      return;
-    }
-    renderIaTab(body);
-  });
 }
 
 function renderShortcutsTab(body) {

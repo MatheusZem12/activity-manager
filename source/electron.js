@@ -13,7 +13,6 @@ const shortcutManager = require('./src/main/shortcut-manager');
 const triggerServer = require('./src/main/trigger-server');
 const hypr = require('./src/main/hypr');
 const sound = require('./src/main/sound');
-const rastro = require('./src/main/rastro/ipc');
 const {
   WM_CLASS, QUICK_WINDOW_TITLE, CLIP_WINDOW_TITLE, PANEL_WINDOW_TITLE
 } = require('./src/main/window-identity');
@@ -55,9 +54,7 @@ function ensurePanelWindow() {
  * editor. Tudo isso para economizar um alt-tab.
  *
  * Como janela comum, o Hyprland cuida de posição, tamanho, foco e workspace —
- * que é o que ele faz melhor que qualquer regra que a gente escrevesse. E a
- * largura maior é o que permite dois painéis lado a lado e gráficos de verdade
- * na aba Rastro.
+ * que é o que ele faz melhor que qualquer regra que a gente escrevesse.
  */
 function createPanelWindow() {
   panelWindow = new BrowserWindow({
@@ -371,20 +368,6 @@ if (!gotLock) {
 
     createTray();
 
-    // O coletor sobe junto com o app e não depende de o painel estar aberto —
-    // ele registra o dia todo, com a janela fechada. Se falhar (fora do
-    // Hyprland, por exemplo), o resto do app continua funcionando.
-    rastro.registrar({
-      aoMudar: () => { if (panelWindow) panelWindow.webContents.send('state:reload'); },
-      aoEntrarNaConta: () => carregarDoServidor()
-    });
-    rastro.iniciar();
-
-    // Atividades e textos vivem no banco. Sem sessão o app sobe do mesmo jeito
-    // — a bandeja, o coletor e as janelas rápidas funcionam — mas as duas listas
-    // ficam vazias até você entrar em Rastro → Conta.
-    await carregarDoServidor();
-
     // O atalho do compositor fala com o serviço por aqui — sem isso, cada
     // acionamento teria que subir um Electron novo.
     try {
@@ -431,83 +414,11 @@ if (!gotLock) {
   app.on('will-quit', () => {
     shortcutManager.unregisterAll();
     triggerServer.stop();
-    // Fecha o segmento aberto: sem isto, a última janela do dia — que costuma
-    // ser a mais longa — não entraria no arquivo.
-    rastro.parar();
   });
 
   app.on('window-all-closed', () => {
     // Mantém vivo na bandeja.
   });
-}
-
-/**
- * Puxa atividades e textos do servidor para o espelho em memória.
- *
- * Na primeira vez com sessão, migra os JSON que o app usava antes — uma vez só,
- * e o servidor recusa duplicata, então rodar de novo é inofensivo. Sem isto, a
- * mudança para o banco custaria o histórico de quem já usava o app.
- */
-async function carregarDoServidor() {
-  const apiClient = require('./src/main/storage/api-client');
-  if (!apiClient.configurado()) return;
-  try {
-    await migrarArquivosAntigos();
-    await activityStore.carregar();
-    await entryStore.carregar();
-    scheduler.cancelAll();
-    for (const activity of activityStore.getPending()) {
-      if (activity.dueAt && activity.dueAt > Date.now()) scheduleActivityNotification(activity);
-    }
-    updateTrayMenu();
-    sendToPanel('state:reload', buildState());
-  } catch (e) {
-    console.error('[dados] não consegui carregar do servidor:', e.message);
-  }
-}
-
-/**
- * Move `activities.json` e `entries.json` para o banco e marca como migrados.
- *
- * A marca é **por servidor**, e isso não é preciosismo: a primeira versão
- * gravava uma marca global, escrita quando o app ainda apontava para o banco de
- * desenvolvimento. Ao trocar para a VPS, a migração não rodava — os dados
- * continuavam nos arquivos, e a tela mostrava "Pendentes (0)" como se tivessem
- * sumido. Cada banco precisa da sua própria migração.
- */
-async function migrarArquivosAntigos() {
-  const fs = require('fs');
-  const servidor = require('./src/main/rastro/servidor');
-  const apelido = servidor.endereco().replace(/^https?:\/\//, '').replace(/[^\w.-]/g, '_');
-  const marca = path.join(app.getPath('userData'), `migrado-para-${apelido}.json`);
-  if (fs.existsSync(marca)) return;
-
-  const ler = (nome) => {
-    try {
-      return JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), nome), 'utf-8'));
-    } catch {
-      return null;
-    }
-  };
-
-  const resultado = {};
-  const atividades = ler('activities.json');
-  if (atividades && Array.isArray(atividades.activities) && atividades.activities.length) {
-    resultado.atividades = (await activityStore.importAll(atividades)).count;
-  }
-  const textos = ler('entries.json');
-  if (textos && Array.isArray(textos.entries) && textos.entries.length) {
-    resultado.textos = (await entryStore.importAll(textos)).count;
-  }
-
-  // Os arquivos NÃO são apagados: se algo der errado na primeira semana, o
-  // original ainda está lá. A marca é o que impede reimportar toda subida.
-  fs.writeFileSync(marca, JSON.stringify({
-    servidor: servidor.endereco(),
-    em: new Date().toISOString(),
-    ...resultado
-  }, null, 2));
-  console.log(`[dados] migrado para ${servidor.endereco()}:`, JSON.stringify(resultado));
 }
 
 // ---------- IPC ----------
@@ -523,8 +434,6 @@ function buildState() {
 ipcMain.handle('app:state', () => buildState());
 
 ipcMain.handle('activity:create', async (_event, rawText) => {
-  // O parsing de `#tag` e `!30` fica aqui, não no servidor: o preview ao vivo
-  // enquanto se digita exige que aconteça na máquina.
   const parsed = parser.parse(rawText, configStore.getConfig().defaultReminderMinutes);
   const activity = await activityStore.saveActivity({
     text: parsed.text,
@@ -646,8 +555,7 @@ ipcMain.handle('entries:delete', async (_event, id) => {
 ipcMain.handle('entries:copy', async (_event, id) => {
   const entry = entryStore.getEntry(id);
   if (!entry) return null;
-  // O clipboard é do sistema: copiar acontece aqui, e o servidor só registra
-  // que aconteceu — é o que alimenta a ordenação por "Copiados".
+  // Conta as cópias: é o que alimenta a ordenação por "Copiados".
   clipboard.writeText(entry.content);
   const updated = await entryStore.markCopied(id);
   broadcastEntries();
@@ -675,20 +583,10 @@ ipcMain.handle('config:save', async (_event, patch) => {
   const saved = configStore.saveConfig(patch);
   syncAutostart(saved);
   await syncShortcut();
-  // O Hyprland reposiciona via window rule no reload acima; em outros
-  // ambientes (ou enquanto o reload não terminou), aplica na hora também.
-  if (panelWindow && !panelWindow.isDestroyed()) {
-    panelWindow.setBounds(panelBounds());
-  }
   sendToPanel('config:updated', saved);
   return saved;
 });
 
-/**
- * Um único arquivo de backup cobre os dois recursos do app: as atividades e os
- * textos do clipboard. O formato antigo (só atividades, sem a chave `entries`)
- * continua sendo aceito na importação — nesse caso os textos ficam intactos.
- */
 ipcMain.handle('quick:close', () => {
   if (quickWindow && !quickWindow.isDestroyed()) {
     quickWindow.close();
