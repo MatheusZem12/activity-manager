@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 #
-# Gatilho da janela rápida. É isto que o atalho do compositor executa.
+# Quick window trigger. This is what the compositor shortcut runs.
 #
-# Caminho normal: o serviço já está rodando na bandeja, então mandamos uma
-# linha pela porta de loopback e a janela abre na hora (bash puro, sem subir
-# processo novo).
+# Normal path: the service is already running in the tray, so we send a line
+# through the loopback port and the window opens right away (plain bash, no
+# new process).
 #
-# Caminho de emergência: o serviço não está rodando — aí sim sobe o Electron,
-# que abre a janela rápida e passa a rodar em segundo plano.
+# Fallback path: the service isn't running — only then does Electron start,
+# opening the quick window and staying in the background.
 set -uo pipefail
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -24,6 +24,6 @@ if [[ -r "$PORT_FILE" ]]; then
   fi
 fi
 
-# Serviço fora do ar: sobe o app (ele fica na bandeja depois disso).
+# Service down: start the app (it stays in the tray after that).
 exec env -u ELECTRON_RUN_AS_NODE GTK_USE_PORTAL=0 \
   "$SRC/node_modules/electron/dist/electron" "$SRC" "--${COMMAND}"

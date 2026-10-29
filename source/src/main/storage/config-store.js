@@ -8,18 +8,18 @@ const DEFAULT_CONFIG = {
   version: 1,
   defaultReminderMinutes: 15,
   maxTextLength: 120,
-  // Ctrl+Alt+A: os atalhos do Omarchy são quase todos SUPER, então esta faixa
-  // costuma estar livre. O usuário pode trocar nas configurações.
+  // Ctrl+Alt+A: Omarchy's shortcuts are nearly all SUPER, so this range is
+  // usually free. The user can change it in the settings.
   globalShortcut: 'Ctrl+Alt+A',
-  // Captura de texto do clipboard. Fica na mesma faixa Ctrl+Alt do atalho de
-  // atividade, para os dois recursos do app não brigarem com o Omarchy.
+  // Clipboard text capture. It sits in the same Ctrl+Alt range as the activity
+  // shortcut, so the app's two features don't clash with Omarchy.
   globalShortcutClip: 'Ctrl+Alt+C',
-  // Abre/foca o painel lateral (a "telinha" com a lista de atividades).
+  // Opens/focuses the panel (the window with the activity list).
   globalShortcutPanel: 'Ctrl+Alt+P',
-  maxTitleLength: 120, // título de um texto do clipboard (o conteúdo é livre)
+  maxTitleLength: 120, // title of a clipboard text (the content is unlimited)
   startOnLogin: true,
   soundEnabled: true,
-  // Volume do chime de alerta, independente do volume do sistema (0-100).
+  // Alert chime volume, independent of the system volume (0-100).
   soundVolume: 60
 };
 

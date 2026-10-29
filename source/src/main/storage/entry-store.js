@@ -26,15 +26,15 @@ function dedupeTags(raw) {
 }
 
 /**
- * Normaliza uma entrada. As regras aqui são o invariante do arquivo:
+ * Normalizes an entry. The rules here are the invariant of the file:
  *
- * - title: string trimmed (o parser já removeu os #tags antes de chegar aqui);
- *   pode ficar vazio — a exibição deriva o título da 1ª linha do conteúdo;
- * - content: string preservada **literalmente** (nunca trim, nunca parse) —
- *   é exatamente o que será colado no clipboard;
- * - tags: lowercase, sem duplicatas;
- * - lastCopiedAt: epoch ms da última cópia via app, null até a primeira;
- * - copyCount: contador de cópias.
+ * - title: a trimmed string (the parser already removed the #tags before this);
+ *   it may be empty — the display derives the title from the content's 1st line;
+ * - content: a string kept **literally** (never trimmed, never parsed) —
+ *   it is exactly what gets pasted to the clipboard;
+ * - tags: lowercase, no duplicates;
+ * - lastCopiedAt: epoch ms of the last copy through the app, null until the first;
+ * - copyCount: a copy counter.
  */
 function normalizeEntry(raw = {}) {
   const now = Date.now();
@@ -50,8 +50,8 @@ function normalizeEntry(raw = {}) {
   };
 }
 
-// O arquivo só é tocado por este processo, então dá para ler uma vez e
-// trabalhar em memória; o disco é atualizado a cada gravação.
+// The file is only touched by this process, so it can be read once and
+// worked on in memory; the disk is updated on every write.
 let cache = null;
 
 function loadState() {
@@ -83,9 +83,9 @@ function getEntry(id) {
 }
 
 /**
- * Cria (unshift, mais novas primeiro) ou atualiza uma entrada. Numa atualização
- * o updatedAt é reescrito; createdAt/lastCopiedAt/copyCount são preservados a
- * menos que o patch os traga.
+ * Creates (unshift, newest first) or updates an entry. On an update the
+ * updatedAt is rewritten; createdAt/lastCopiedAt/copyCount are kept unless
+ * the patch brings them.
  */
 function saveEntry(patch) {
   const state = loadState();
@@ -106,8 +106,8 @@ function saveEntry(patch) {
 }
 
 /**
- * Marca uma entrada como copiada agora: atualiza lastCopiedAt e incrementa
- * copyCount. Devolve a entrada atualizada (ou null se não existir).
+ * Marks an entry as copied now: updates lastCopiedAt and increments
+ * copyCount. Returns the updated entry (or null if it doesn't exist).
  */
 function markCopied(id) {
   const state = loadState();
@@ -132,7 +132,7 @@ function exportAll() {
 
 function importAll(data) {
   if (!data || !Array.isArray(data.entries)) {
-    throw new Error('Arquivo de backup inválido.');
+    throw new Error('Invalid backup file.');
   }
   const state = {
     version: data.version || 1,

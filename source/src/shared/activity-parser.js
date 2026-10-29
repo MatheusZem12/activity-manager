@@ -1,20 +1,20 @@
 /**
- * Interpreta o texto digitado pelo usuário.
+ * Parses the text typed by the user.
  *
- * Formato:
- *   texto da atividade #tag1 #tag2 !30
+ * Format:
+ *   activity text #tag1 #tag2 !30
  *
- * - hashtags (#) são extraídas como categorias;
- * - !N define o tempo do alerta: !30 ou !30m (minutos), !2h (horas),
- *   !1h30 (horas e minutos);
- * - tudo que sobrar vira o texto da atividade.
+ * - hashtags (#) are extracted as categories;
+ * - !N sets the alert time: !30 or !30m (minutes), !2h (hours),
+ *   !1h30 (hours and minutes);
+ * - whatever is left becomes the activity text.
  *
- * Se o tempo não for informado, usa defaultReminderMinutes e
- * `explicitReminder` volta false — quem edita uma atividade usa isso para
- * saber se deve mexer no alerta ou deixá-lo como está.
+ * If no time is given, defaultReminderMinutes applies and
+ * `explicitReminder` comes back false — whoever edits an activity uses it to
+ * know whether to touch the alert or leave it as it is.
  *
- * Este arquivo roda tanto no main (require) quanto no renderer (script tag,
- * vira window.ActivityParser) — por isso o invólucro UMD.
+ * This file runs both in main (require) and in the renderer (script tag,
+ * it becomes window.ActivityParser) — hence the UMD wrapper.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
@@ -24,7 +24,7 @@
   }
 })(typeof self !== 'undefined' ? self : this, function () {
   const TAG_PATTERN = /#([a-zA-Z0-9_À-ÿ]+)/g;
-  // !2h, !1h30, !1h30m, !45m, !45 — a forma com horas vem primeiro na alternação.
+  // !2h, !1h30, !1h30m, !45m, !45 — the form with hours comes first in the alternation.
   const TIME_PATTERN = /!(?:(\d+)h(?:(\d{1,2})m?)?|(\d+)m?)/i;
 
   function parse(input, defaultReminderMinutes = 15) {

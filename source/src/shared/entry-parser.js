@@ -1,17 +1,17 @@
 /**
- * Interpreta o título digitado pelo usuário.
+ * Parses the title typed by the user.
  *
- * Formato:
- *   título do texto #tag1 #tag2
+ * Format:
+ *   text title #tag1 #tag2
  *
- * - hashtags (#) são extraídas como categorias e removidas do título;
- * - tudo que sobrar (com espaços colapsados) vira o título limpo.
+ * - hashtags (#) are extracted as categories and removed from the title;
+ * - whatever is left (with spaces collapsed) becomes the clean title.
  *
- * Atenção: isto roda **apenas sobre o título**. O conteúdo da entrada nunca
- * passa por aqui — ele é armazenado byte a byte, porque é o que será colado.
+ * Note: this runs **on the title only**. The entry content never goes
+ * through here — it is stored byte for byte, because it is what gets pasted.
  *
- * Este arquivo roda tanto no main (require) quanto no renderer (script tag,
- * vira window.EntryParser) — por isso o invólucro UMD.
+ * This file runs both in main (require) and in the renderer (script tag,
+ * it becomes window.EntryParser) — hence the UMD wrapper.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
@@ -20,7 +20,7 @@
     root.EntryParser = factory();
   }
 })(typeof self !== 'undefined' ? self : this, function () {
-  // O À-ÿ permite acentos (categorias em português).
+  // À-ÿ allows accents (categories in other languages, e.g. Portuguese).
   const TAG_PATTERN = /#([a-zA-Z0-9_À-ÿ]+)/g;
 
   function parseTitle(input) {

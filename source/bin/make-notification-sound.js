@@ -1,29 +1,29 @@
 #!/usr/bin/env node
 /**
- * Gera assets/notification.wav — o chime tocado quando um alerta de atividade
- * dispara. O .wav vai versionado junto; este script existe só para que o som
- * possa ser ajustado sem precisar caçar um arquivo de áudio na internet.
+ * Generates assets/notification.wav — the chime played when an activity alert
+ * fires. The .wav is versioned along; this script only exists so the sound can
+ * be tweaked without hunting for an audio file on the internet.
  *
  *   node bin/make-notification-sound.js
  *
- * Duas senoides em intervalo de quinta (A5 -> E6), a segunda entrando um pouco
- * depois da primeira, cada uma com decaimento exponencial. É a forma clássica
- * de "ding-dong" de notificação: sobe, não assusta, e some rápido.
+ * Two sine waves a fifth apart (A5 -> E6), the second coming in a little
+ * after the first, each with an exponential decay. It is the classic
+ * notification "ding-dong": it rises, doesn't startle, and fades fast.
  */
 const fs = require('fs');
 const path = require('path');
 
 const SAMPLE_RATE = 44100;
-const DURATION = 0.9; // segundos, com o rabo do decaimento já incluso
-const AMPLITUDE = 0.32; // longe do teto: alerta não precisa gritar
+const DURATION = 0.9; // seconds, with the decay tail included
+const AMPLITUDE = 0.32; // far from the ceiling: an alert doesn't need to shout
 
 const TONES = [
   { freq: 880.0, start: 0.0, decay: 0.22 },  // A5
   { freq: 1318.5, start: 0.13, decay: 0.30 } // E6
 ];
 
-// Rampa de subida curtíssima. Sem ela a onda começa num degrau e o alto-falante
-// entrega um "clique" no ataque.
+// A very short attack ramp. Without it the wave starts on a step and the speaker
+// gives a "click" on the attack.
 const ATTACK = 0.005;
 
 function sampleAt(t) {
@@ -34,8 +34,8 @@ function sampleAt(t) {
     if (age < 0) continue;
 
     const envelope = Math.exp(-age / tone.decay) * Math.min(1, age / ATTACK);
-    // A oitava acima entra baixinha só para dar brilho ao timbre — uma senoide
-    // pura soa oca demais.
+    // The octave above comes in softly just to brighten the timbre — a pure
+    // sine sounds too hollow.
     const wave =
       Math.sin(2 * Math.PI * tone.freq * age) +
       0.18 * Math.sin(2 * Math.PI * tone.freq * 2 * age);
@@ -67,13 +67,13 @@ function wrapInWav(pcm) {
   header.writeUInt32LE(36 + pcm.length, 4);
   header.write('WAVE', 8);
   header.write('fmt ', 12);
-  header.writeUInt32LE(16, 16); // tamanho do bloco fmt
-  header.writeUInt16LE(1, 20); // PCM sem compressão
+  header.writeUInt32LE(16, 16); // fmt chunk size
+  header.writeUInt16LE(1, 20); // uncompressed PCM
   header.writeUInt16LE(1, 22); // mono
   header.writeUInt32LE(SAMPLE_RATE, 24);
   header.writeUInt32LE(byteRate, 28);
   header.writeUInt16LE(2, 32); // block align
-  header.writeUInt16LE(16, 34); // bits por amostra
+  header.writeUInt16LE(16, 34); // bits per sample
   header.write('data', 36);
   header.writeUInt32LE(pcm.length, 40);
 

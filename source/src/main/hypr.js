@@ -1,13 +1,13 @@
 /**
- * Ponte com o Hyprland via `hyprctl`.
+ * A bridge to Hyprland through `hyprctl`.
  *
- * No Wayland o compositor é o único que enxerga o teclado — nenhum app registra
- * atalho global por conta própria. Em vez de pedir para o usuário editar a
- * config do Hyprland na mão, o serviço fala com o compositor por aqui.
+ * On Wayland the compositor is the only one that sees the keyboard — no app
+ * registers a global shortcut on its own. Instead of asking the user to edit
+ * the Hyprland config by hand, the service talks to the compositor here.
  */
 const { execFile } = require('child_process');
 
-// Bits de modificador do Hyprland (mesma tabela do xkb).
+// Hyprland modifier bits (the same table as xkb's).
 const MOD_BITS = {
   SHIFT: 1,
   CAPS: 2,
@@ -45,8 +45,8 @@ async function configErrors() {
 }
 
 /**
- * Binds já registrados no compositor, para avisar sobre conflitos antes de
- * sobrescrever um atalho que o usuário usa para outra coisa.
+ * Binds already registered in the compositor, to warn about conflicts before
+ * overwriting a shortcut the user uses for something else.
  */
 async function listBinds() {
   try {
@@ -62,8 +62,8 @@ function modMask(modifiers) {
 }
 
 /**
- * Procura um bind existente para a mesma combinação. Devolve a descrição do
- * bind (`bindd`) ou o comando, para mostrar ao usuário o que será sobrescrito.
+ * Looks for an existing bind on the same combination. Returns the bind
+ * description (`bindd`) or the command, to show the user what will be overwritten.
  */
 async function findConflict({ modifiers, key }) {
   const mask = modMask(modifiers);

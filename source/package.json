@@ -1,7 +1,7 @@
 {
   "name": "activity-manager",
   "version": "0.1.0",
-  "description": "Serviço desktop local para anotar atividades com alertas e guardar textos para colar",
+  "description": "A local desktop service to jot down activities with alerts and keep texts to paste",
   "main": "electron.js",
   "scripts": {
     "start": "GTK_USE_PORTAL=0 electron .",

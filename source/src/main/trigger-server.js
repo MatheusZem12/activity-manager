@@ -1,14 +1,14 @@
 /**
- * Servidor de gatilho local.
+ * Local trigger server.
  *
- * O bind do compositor não consegue falar com o processo do Electron
- * diretamente. Em vez de subir um segundo Electron a cada atalho (lento, ~1s),
- * o serviço escuta numa porta de loopback e o script do atalho manda uma linha
- * de texto — a janela rápida abre em milissegundos.
+ * The compositor bind can't talk to the Electron process directly.
+ * Instead of starting a second Electron on every shortcut (slow, ~1s), the
+ * service listens on a loopback port and the shortcut script sends one line
+ * of text — the quick window opens in milliseconds.
  *
- * A porta só aceita conexões de 127.0.0.1 e os únicos comandos aceitos são
- * "quick" (nova atividade), "clip" (novo texto), "panel" e "open" (abrir o
- * painel). Nada de dados entra ou sai por aqui.
+ * The port only accepts connections from 127.0.0.1 and the only accepted
+ * commands are "quick" (new activity), "clip" (new text), "panel" and "open"
+ * (open the panel). No data comes in or goes out through here.
  */
 const net = require('net');
 const fs = require('fs');
@@ -71,7 +71,7 @@ function stop() {
   try {
     fs.unlinkSync(portFilePath());
   } catch {
-    // O arquivo some junto com o runtime dir de qualquer forma.
+    // The file goes away with the runtime dir anyway.
   }
 }
 

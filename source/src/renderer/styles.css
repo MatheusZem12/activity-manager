@@ -104,7 +104,7 @@ html, body {
   color: var(--danger);
 }
 
-/* Preview ao vivo do texto interpretado (#tags e !tempo) */
+/* Live preview of the parsed text (#tags and !time) */
 
 .input-preview {
   display: flex;
@@ -147,7 +147,7 @@ html, body {
   background: rgba(245, 158, 11, 0.15);
 }
 
-/* Sugestões de #tags existentes */
+/* Suggestions of existing #tags */
 
 .tag-suggest {
   display: flex;
@@ -220,7 +220,7 @@ html, body {
   font-size: 12px;
 }
 
-/* ---------- Janela rápida de texto (clipboard) ---------- */
+/* ---------- Quick text window (clipboard) ---------- */
 
 .quick-title-input {
   width: 100%;
@@ -379,7 +379,7 @@ html, body {
   color: var(--text-muted);
 }
 
-/* Busca e filtro por tag */
+/* Search and filter by tag */
 
 .toolbar {
   display: flex;
@@ -591,7 +591,7 @@ html, body {
   color: #0f172a;
 }
 
-/* Toast de confirmação */
+/* Confirmation toast */
 
 #toast {
   position: fixed;
@@ -618,7 +618,7 @@ html, body {
   transform: translateY(0);
 }
 
-/* Aba Clipboard */
+/* Clipboard tab */
 
 .add-card {
   background: var(--surface);
@@ -660,7 +660,7 @@ html, body {
   margin-top: 10px;
 }
 
-/* Ordenação (Recentes / Copiados) */
+/* Sorting (Recent / Most copied) */
 
 .panel-sort {
   display: flex;
@@ -706,9 +706,9 @@ html, body {
   border-left-color: var(--warning);
 }
 
-/* O .edit-input é compartilhado com o card de atividade, onde ele é um item
-   flex em linha (flex: 1). Aqui o card empilha em coluna, então o flex faria
-   o campo esticar na vertical. */
+/* .edit-input is shared with the activity card, where it is an inline flex
+   item (flex: 1). Here the card stacks in a column, so flex would stretch the
+   field vertically. */
 .entry-card .edit-input {
   flex: none;
   width: 100%;
@@ -726,8 +726,8 @@ html, body {
   word-break: break-word;
 }
 
-/* O conteúdo é monoespaçado e truncado em 4 linhas: o card é um índice, não
-   um leitor — o texto inteiro vai pro clipboard no botão Copiar. */
+/* The content is monospaced and cut at 4 lines: the card is an index, not a
+   reader — the whole text goes to the clipboard with the Copy button. */
 .entry-content {
   font-size: 12px;
   color: var(--text-muted);
@@ -826,9 +826,9 @@ html, body {
   gap: 16px;
 }
 
-/* Coluna flex estica os filhos por padrão, e o botão de salvar virava uma faixa
-   de 750px com uma palavra no meio. Cartão ocupa a largura; botão tem o tamanho
-   do que está escrito nele. */
+/* A flex column stretches its children by default, and the save button became
+   a 750px strip with one word in the middle. The card takes the width; the
+   button is the size of what is written on it. */
 .settings-form > .btn { align-self: flex-start; }
 
 .volume-row {
@@ -937,13 +937,13 @@ html, body {
   margin-top: 8px;
 }
 
-/* Esconde um bloco sem tirá-lo do DOM. */
-.oculto { display: none; }
+/* Hides a block without taking it out of the DOM. */
+.is-hidden { display: none; }
 
-/* ---------- Barra de rolagem ----------
-   A nativa do GTK aparece clara, larga e com setas — num painel escuro de 420px
-   ela come espaço e chama mais atenção que o conteúdo. Fina, sem seta, e só
-   visível quando há o que rolar. */
+/* ---------- Scrollbar ----------
+   The native GTK one shows up light, wide and with arrows — in a dark 420px
+   panel it eats space and draws more attention than the content. Thin, no
+   arrows, and visible only when there is something to scroll. */
 
 * {
   scrollbar-width: thin;
@@ -955,17 +955,17 @@ html, body {
 ::-webkit-scrollbar-thumb {
   background: var(--surface-2);
   border-radius: 4px;
-  /* A borda transparente afina o polegar sem estreitar a área de clique. */
+  /* The transparent border slims the thumb without narrowing the click area. */
   border: 2px solid transparent;
   background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover { background: #475569; background-clip: content-box; }
 ::-webkit-scrollbar-corner { background: transparent; }
-/* Setas de cima e de baixo: herança de desktop antigo, e o gesto de rolar não
-   passa por elas há anos. */
+/* Up and down arrows: a legacy of old desktops, and the scroll gesture hasn't
+   gone through them in years. */
 ::-webkit-scrollbar-button { display: none; }
 
-/* ---------- Ações do cabeçalho ---------- */
+/* ---------- Header actions ---------- */
 
 .topbar-acoes {
   display: flex;
@@ -987,16 +987,16 @@ html, body {
 .panel-acao:hover { color: var(--text); background: var(--surface-2); }
 .panel-acao:disabled { opacity: 0.4; cursor: wait; }
 
-/* ---------- Tela de configurações ---------- */
+/* ---------- Settings screen ---------- */
 
-.cfg-secao {
+.cfg-section {
   background: var(--surface);
   border-radius: var(--radius);
   padding: 14px 14px 6px;
   margin-bottom: 12px;
 }
 
-.cfg-titulo {
+.cfg-heading {
   font-size: 11px;
   font-weight: 600;
   color: var(--text-muted);
@@ -1005,37 +1005,37 @@ html, body {
   margin: 0 0 12px;
 }
 
-/* Número com a unidade ao lado: "15" sozinho num campo não diz se é minuto ou
-   hora, e a dica embaixo chega tarde demais. */
-.cfg-numero {
+/* A number with its unit next to it: a lone "15" in a field doesn't say whether
+   it is minutes or hours, and the hint below comes too late. */
+.cfg-number {
   display: flex;
   align-items: center;
   gap: 8px;
 }
-.cfg-numero input {
+.cfg-number input {
   width: 90px;
   flex-shrink: 0;
 }
-.cfg-numero span {
+.cfg-number span {
   font-size: 12px;
   color: var(--text-muted);
 }
 
-/* A linha inteira alterna a caixa — alvo de 12px é alvo de mouse preciso. */
-.cfg-chave {
+/* The whole row toggles the box — a 12px target is a precise-mouse target. */
+.cfg-toggle {
   display: flex;
   align-items: flex-start;
   gap: 10px;
   cursor: pointer;
   padding: 4px 0 12px;
 }
-.cfg-chave input {
+.cfg-toggle input {
   width: auto;
   margin: 2px 0 0;
   flex-shrink: 0;
 }
-.cfg-chave span { font-size: 13px; line-height: 1.4; }
-.cfg-chave em {
+.cfg-toggle span { font-size: 13px; line-height: 1.4; }
+.cfg-toggle em {
   display: block;
   font-style: normal;
   font-size: 11px;
@@ -1050,21 +1050,21 @@ html, body {
   font-size: 11px;
 }
 
-/* ---------- Configurações: pares, notas e escolhas ---------- */
+/* ---------- Settings: pairs, notes and choices ---------- */
 
-.cfg-par {
+.cfg-pair {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   gap: 12px;
   font-size: 12px;
   padding: 5px 0;
-  /* `space-between` numa linha de 750px joga rótulo e valor para cantos
-     opostos, e os dois deixam de se ler como um par. */
+  /* `space-between` on a 750px row throws label and value into opposite
+     corners, and the two stop reading as a pair. */
   max-width: 480px;
 }
-.cfg-par span { color: var(--text-muted); }
-.cfg-par code {
+.cfg-pair span { color: var(--text-muted); }
+.cfg-pair code {
   background: var(--surface-2);
   padding: 2px 7px;
   border-radius: 4px;
@@ -1074,22 +1074,22 @@ html, body {
   white-space: nowrap;
 }
 
-.cfg-nota {
+.cfg-note {
   font-size: 11px;
   color: var(--text-muted);
   line-height: 1.55;
   margin: 0 0 10px;
 }
-.cfg-nota.erro { color: var(--danger); }
-.cfg-nota code {
+.cfg-note.error { color: var(--danger); }
+.cfg-note code {
   background: var(--surface-2);
   padding: 1px 5px;
   border-radius: 4px;
 }
 
-/* Escolha exclusiva como cartão: o rádio de 13px é alvo pequeno demais, e a
-   nota embaixo é o que faz a escolha ser informada. */
-.cfg-opcao {
+/* An exclusive choice as a card: a 13px radio is too small a target, and the
+   note below is what makes the choice an informed one. */
+.cfg-option {
   display: flex;
   align-items: flex-start;
   gap: 10px;
@@ -1099,14 +1099,14 @@ html, body {
   border: 1px solid var(--surface-2);
   cursor: pointer;
 }
-.cfg-opcao:hover { border-color: #475569; }
-.cfg-opcao.ativa {
+.cfg-option:hover { border-color: #475569; }
+.cfg-option.ativa {
   border-color: var(--primary);
   background: rgba(99, 102, 241, 0.08);
 }
-.cfg-opcao input { width: auto; margin: 2px 0 0; flex-shrink: 0; }
-.cfg-opcao span { font-size: 13px; line-height: 1.35; }
-.cfg-opcao em {
+.cfg-option input { width: auto; margin: 2px 0 0; flex-shrink: 0; }
+.cfg-option span { font-size: 13px; line-height: 1.35; }
+.cfg-option em {
   display: block;
   font-style: normal;
   font-size: 11px;
@@ -1114,24 +1114,24 @@ html, body {
   margin-top: 3px;
   line-height: 1.45;
 }
-.cfg-opcao em code {
+.cfg-option em code {
   background: var(--surface-2);
   padding: 1px 4px;
   border-radius: 3px;
 }
 
-/* Não detectado continua clicável de propósito: instalar o ollama depois não
-   deveria exigir voltar aqui e descobrir que a opção sumiu. */
-.cfg-opcao.indisponivel { opacity: 0.55; }
+/* Not detected stays clickable on purpose: installing ollama later shouldn't
+   mean coming back here to find the option gone. */
+.cfg-option.indisponivel { opacity: 0.55; }
 
 .volume-row { display: flex; align-items: center; gap: 10px; }
 .volume-row input[type="range"] { flex: 1; }
 
-/* Campo de texto dentro de uma seção ocupa a linha. A largura padrão do
-   `input` é a do atributo `size`, ~20 caracteres — o placeholder já não cabe. */
-.cfg-secao input[type="text"],
-.cfg-secao input[type="password"],
-.cfg-secao input[type="email"] {
+/* A text field inside a section takes the whole row. The default `input` width
+   is that of the `size` attribute, ~20 characters — the placeholder no longer fits. */
+.cfg-section input[type="text"],
+.cfg-section input[type="password"],
+.cfg-section input[type="email"] {
   width: 100%;
   background: var(--surface-2);
   border: 1px solid transparent;
@@ -1142,23 +1142,23 @@ html, body {
   font-size: 12px;
   max-width: 420px;
 }
-.cfg-secao input[type="text"]:focus,
-.cfg-secao input[type="password"]:focus { outline: none; border-color: var(--primary); }
+.cfg-section input[type="text"]:focus,
+.cfg-section input[type="password"]:focus { outline: none; border-color: var(--primary); }
 
-.cfg-secao .form-hint { margin-top: 6px; }
-.cfg-secao .form-group { margin-bottom: 16px; }
+.cfg-section .form-hint { margin-top: 6px; }
+.cfg-section .form-group { margin-bottom: 16px; }
 
 /* ==========================================================================
-   Controles — uma passada única sobre botão, select, input e range.
+   Controls — one single pass over button, select, input and range.
    ==========================================================================
 
-   Estavam cada um por si: os `select` sem estilo nenhum (o GTK desenhava a seta
-   clara, fora do tema escuro), os botões com três alturas diferentes conforme a
-   tela, e os `range` nativos. Aqui eles passam a ter a mesma linguagem: mesma
-   altura, mesmo raio, mesmo foco. */
+   Each was on its own: the `select`s had no style at all (GTK drew a light
+   arrow, outside the dark theme), buttons had three different heights depending
+   on the screen, and the `range`s were native. Here they share one language:
+   same height, same radius, same focus. */
 
 :root {
-  --controle-altura: 34px;
+  --height-control: 34px;
   --controle-raio: 8px;
   --borda: #334155;
 }
@@ -1169,7 +1169,7 @@ select {
   appearance: none;
   -webkit-appearance: none;
   width: 100%;
-  height: var(--controle-altura);
+  height: var(--height-control);
   background: var(--surface-2);
   border: 1px solid transparent;
   border-radius: var(--controle-raio);
@@ -1179,9 +1179,9 @@ select {
   padding: 0 32px 0 10px;
   cursor: pointer;
 
-  /* A seta é desenhada aqui porque a nativa do GTK vem clara e não acompanha o
-     tema — num painel escuro ela aparece como um retângulo branco. SVG embutido
-     para não depender de fonte de ícone nem de arquivo externo. */
+  /* The arrow is drawn here because the native GTK one is light and doesn't
+     follow the theme — on a dark panel it shows up as a white rectangle. An
+     embedded SVG so it depends on no icon font or external file. */
   background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='none' stroke='%2394a3b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 10px center;
@@ -1190,14 +1190,14 @@ select:hover { border-color: var(--borda); }
 select:focus { outline: none; border-color: var(--primary); }
 select option { background: var(--surface); color: var(--text); }
 
-/* ---------- botão ---------- */
+/* ---------- button ---------- */
 
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: var(--controle-altura);
+  height: var(--height-control);
   padding: 0 14px;
   font: inherit;
   font-size: 12px;
@@ -1213,8 +1213,8 @@ select option { background: var(--surface); color: var(--text); }
 .btn-primary { background: var(--primary); color: #fff; }
 .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
 
-/* Secundário como contorno, não como bloco cinza: assim ele não disputa
-   atenção com o primário na mesma tela. */
+/* Secondary as an outline, not as a grey block: that way it doesn't compete
+   for attention with the primary one on the same screen. */
 .btn-secondary {
   background: transparent;
   border-color: var(--borda);
@@ -1250,7 +1250,7 @@ input[type="range"]::-moz-range-thumb {
   background: var(--primary); cursor: pointer; border: none;
 }
 
-/* ---------- caixa de seleção ---------- */
+/* ---------- checkbox ---------- */
 
 input[type="checkbox"], input[type="radio"] {
   appearance: none;
@@ -1288,7 +1288,7 @@ input[type="radio"]:checked::after {
   background: #fff;
 }
 
-/* ---------- campos de texto e número ---------- */
+/* ---------- text and number fields ---------- */
 
 input[type="text"], input[type="number"], input[type="email"],
 input[type="password"], input[type="search"], textarea {
@@ -1304,19 +1304,19 @@ input:hover:not(:focus), textarea:hover:not(:focus) { border-color: var(--borda)
 input:focus, textarea:focus { outline: none; border-color: var(--primary); }
 input::placeholder, textarea::placeholder { color: #64748b; }
 
-/* O spinner do number é largo e claro no GTK, e o campo já tem `min`. */
+/* The number spinner is wide and light in GTK, and the field already has `min`. */
 input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
 /* ==========================================================================
-   Janela normal: a interface deixa de ser uma coluna de 420px
+   A normal window: the interface stops being a 420px column
    ========================================================================== */
 
 .main-layout { max-width: 100%; }
 
-/* O conteúdo respira até 1100px e centraliza depois. Linha de texto muito
-   longa cansa de ler, e a tela pode ir a 2560px. */
+/* The content breathes up to 1100px and centers after that. A very long text
+   line is tiring to read, and the screen can go up to 2560px. */
 .content {
   max-width: 1100px;
   margin: 0 auto;
@@ -1324,39 +1324,39 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 }
 
 /* ==========================================================================
-   Largura: o que foi desenhado para 420px numa janela de 1100px
+   Width: what was designed for 420px in a 1100px window
    ==========================================================================
 
-   Nada aqui é "responsivo" no sentido de encolher — é o contrário. O layout
-   nasceu numa coluna estreita, onde esticar tudo era certo porque não havia
-   alternativa. Numa janela larga, esticar vira o problema: aba de 240px, linha
-   de texto de 900px, cartão com metade de área vazia. */
+   Nothing here is "responsive" in the shrinking sense — it is the opposite. The
+   layout was born in a narrow column, where stretching everything was right
+   because there was no alternative. In a wide window, stretching becomes the
+   problem: a 240px tab, a 900px text line, a card with half of it empty. */
 
-/* ---------- navegação ---------- */
+/* ---------- navigation ---------- */
 
-/* `flex: 1` dividia a barra em quatro fatias iguais. Com 941px cada aba virava
-   um botão de 235px com uma palavra no meio. */
+/* `flex: 1` split the bar into four equal slices. At 941px each tab became a
+   235px button with one word in the middle. */
 .nav button { flex: 0 0 auto; padding: 8px 16px; }
 .nav { gap: 4px; }
 
 .topbar-row { align-items: center; }
 
-/* ---------- largura de leitura ---------- */
+/* ---------- reading width ---------- */
 
-/* Listas de texto ficam em 780px: linha muito longa cansa de ler, e a de 900px
-   fazia o olho perder a linha ao voltar.
-   
-   O limite mora no `#main-content` porque as telas escrevem direto nele, sem
-   invólucro próprio. */
+/* Text lists stay at 780px: a very long line is tiring to read, and the 900px
+   one made the eye lose the line on the way back.
+
+   The limit lives on `#main-content` because the screens write straight into
+   it, without their own wrapper. */
 .content { max-width: 1100px; }
 #main-content { max-width: 780px; margin: 0 auto; width: 100%; }
 
-/* ---------- cartão de atividade ---------- */
+/* ---------- activity card ---------- */
 
-/* Era coluna: texto em cima, botões numa segunda linha alinhada à direita. Numa
-   coluna estreita isso era necessário; com espaço, a segunda linha deixava um
-   vão de ~50px em cada cartão. Agora os botões ficam ao lado, e o cartão tem a
-   altura do seu conteúdo. */
+/* It was a column: text on top, buttons on a second right-aligned row. In a
+   narrow column that was needed; with room, the second row left a ~50px gap in
+   every card. Now the buttons sit beside it, and the card is as tall as its
+   content. */
 @media (min-width: 640px) {
   .activity-card {
     flex-direction: row;
@@ -1373,7 +1373,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 
 .activity-text { margin-bottom: 4px; line-height: 1.4; }
 
-/* ---------- cartões do clipboard ---------- */
+/* ---------- clipboard cards ---------- */
 
 @media (min-width: 640px) {
   .entry-card { padding: 12px 14px; }

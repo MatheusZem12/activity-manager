@@ -1,15 +1,15 @@
 /**
- * Identidade das janelas para o compositor — fonte única da verdade.
+ * Window identity for the compositor — the single source of truth.
  *
- * O `class` (definido por app.setName) e os títulos das janelas overlay
- * aparecem no electron.js (ao criar as janelas) **e** no shortcut-manager.js
- * (ao gerar as window rules do Hyprland). Se divergirem por um caractere, o
- * float/pin/stay_focused silenciosamente deixa de casar. Por isso ficam aqui,
- * num só lugar, importados pelos dois.
+ * The `class` (set by app.setName) and the overlay window titles show up in
+ * electron.js (when creating the windows) **and** in shortcut-manager.js
+ * (when generating the Hyprland window rules). If they differ by one character,
+ * float/pin/stay_focused silently stops matching. That is why they live here,
+ * in one place, imported by both.
  */
 module.exports = {
   WM_CLASS: 'activity-manager',
-  QUICK_WINDOW_TITLE: 'Nova atividade',
-  CLIP_WINDOW_TITLE: 'Novo texto',
-  PANEL_WINDOW_TITLE: 'Atividades'
+  QUICK_WINDOW_TITLE: 'New activity',
+  CLIP_WINDOW_TITLE: 'New text',
+  PANEL_WINDOW_TITLE: 'Activities'
 };

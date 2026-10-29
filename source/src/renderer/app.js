@@ -9,8 +9,8 @@ const appEl = document.getElementById('app');
 
 let state = { activities: [], entries: [], config: {} };
 
-// Estado da interface — sobrevive às re-renderizações disparadas por eventos
-// do main, para nunca apagar o que está sendo digitado.
+// UI state — it survives the re-renders triggered by events from main, so
+// what is being typed is never wiped.
 let currentScreen = 'dashboard';
 let searchQuery = '';
 let activeTag = null;
@@ -20,7 +20,7 @@ let editDraft = '';
 let dashDraft = '';
 let quickDraft = '';
 
-// Aba de clipboard (dentro do painel)
+// Clipboard tab (inside the panel)
 let clipSearchQuery = '';
 let clipActiveTag = null;
 let clipSort = 'recent'; // 'recent' | 'copied'
@@ -30,16 +30,16 @@ let editEntryContentDraft = '';
 let addEntryTitleDraft = '';
 let addEntryContentDraft = '';
 
-// Aba de configurações — sub-abas (geral/atalhos/notificações/volume) e o
-// rascunho das edições, ver renderSettings().
-let settingsTab = 'geral';
+// Settings tab — sub-tabs (general/shortcuts/alerts) and the draft of the
+// edits, see renderSettings().
+let settingsTab = 'general';
 let settingsDraft = null;
 
-// Janela rápida de captura de texto
+// Quick text capture window
 let clipTitleDraft = '';
 let clipContentDraft = '';
 
-// ---------- Utilitários ----------
+// ---------- Utilities ----------
 
 function formatDuration(ms) {
   if (!ms || ms < 0) return '—';
@@ -56,13 +56,13 @@ function formatDuration(ms) {
 function formatTime(timestamp) {
   if (!timestamp) return '';
   const d = new Date(timestamp);
-  return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+  return d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
 }
 
 function timeUntil(timestamp) {
   const diff = timestamp - Date.now();
-  if (diff <= 0) return 'agora';
-  return `em ${formatDuration(diff)}`;
+  if (diff <= 0) return 'now';
+  return `in ${formatDuration(diff)}`;
 }
 
 function escapeHtml(text) {
@@ -91,7 +91,7 @@ function allTags() {
   return Object.entries(counts).sort((a, b) => b[1] - a[1]);
 }
 
-/** Tags dos textos do clipboard — contadas separadas das de atividade. */
+/** Tags of the clipboard texts — counted apart from the activity ones. */
 function allEntryTags() {
   const counts = {};
   for (const e of state.entries) {
@@ -108,15 +108,15 @@ function findEntry(id) {
   return state.entries.find((e) => e.id === id) || null;
 }
 
-/** Título exibido: o armazenado ou, se vazio, a 1ª linha do conteúdo (60 chars). */
+/** Displayed title: the stored one or, if empty, the content's 1st line (60 chars). */
 function displayTitle(entry) {
   if (entry.title && entry.title.trim()) return entry.title;
   const firstLine = (entry.content || '').split('\n')[0].trim();
-  if (!firstLine) return '(sem título)';
+  if (!firstLine) return '(untitled)';
   return firstLine.length > 60 ? firstLine.slice(0, 60) + '…' : firstLine;
 }
 
-/** Recompõe o título editável a partir do título limpo + tags. */
+/** Rebuilds the editable title from the clean title + tags. */
 function rawTitleFor(entry) {
   const tags = entry.tags.map((t) => ` #${t}`).join('');
   return `${entry.title}${tags}`.trim();
@@ -136,7 +136,7 @@ function toast(message) {
   toastTimer = setTimeout(() => el.classList.remove('visible'), 2600);
 }
 
-// ---------- Entrada inteligente (preview + autocomplete de tags) ----------
+// ---------- Smart input (preview + tag autocomplete) ----------
 
 function renderParsePreview(el, raw) {
   const value = (raw || '').trim();
@@ -148,11 +148,11 @@ function renderParsePreview(el, raw) {
   const parts = [
     parsed.text
       ? `<span class="preview-text">${escapeHtml(parsed.text)}</span>`
-      : '<span class="preview-text empty">sem texto</span>'
+      : '<span class="preview-text empty">no text</span>'
   ];
   parsed.tags.forEach((t) => parts.push(`<span class="preview-chip">#${escapeHtml(t)}</span>`));
   parts.push(
-    `<span class="preview-chip time">⏰ ${formatDuration(parsed.reminderMinutes * 60000)}${parsed.explicitReminder ? '' : ' (padrão)'}</span>`
+    `<span class="preview-chip time">⏰ ${formatDuration(parsed.reminderMinutes * 60000)}${parsed.explicitReminder ? '' : ' (default)'}</span>`
   );
   el.innerHTML = parts.join('');
 }
@@ -164,8 +164,8 @@ function currentTagPrefix(value, caret) {
 }
 
 /**
- * Liga preview ao vivo, contador e autocomplete de #tags a um input.
- * Tab aceita a primeira sugestão; Enter envia.
+ * Wires a live preview, a counter and #tag autocomplete to an input.
+ * Tab accepts the first suggestion; Enter submits.
  */
 function setupSmartInput(input, { previewEl, suggestEl, counterEl, onSubmit, onChange }) {
   function completeTag(ctx, tag) {
@@ -196,7 +196,7 @@ function setupSmartInput(input, { previewEl, suggestEl, counterEl, onSubmit, onC
       .map((t) => `<button type="button" class="suggest-chip" data-tag="${escapeHtml(t)}">#${escapeHtml(t)}</button>`)
       .join('');
     suggestEl.querySelectorAll('.suggest-chip').forEach((btn) => {
-      // mousedown: completa antes de o input perder o foco.
+      // mousedown: completes before the input loses focus.
       btn.addEventListener('mousedown', (e) => {
         e.preventDefault();
         const liveCtx = currentTagPrefix(input.value, input.selectionStart ?? input.value.length);
@@ -239,9 +239,9 @@ function setupSmartInput(input, { previewEl, suggestEl, counterEl, onSubmit, onC
 }
 
 /**
- * Versão do setupSmartInput para o **título de um texto do clipboard**: só
- * extrai #tags (não há !tempo aqui) e não trata o Enter — quem chama decide se
- * ele salva ou pula para o campo de conteúdo.
+ * A setupSmartInput version for the **title of a clipboard text**: it only
+ * extracts #tags (there's no !time here) and doesn't handle Enter — the caller
+ * decides whether it saves or jumps to the content field.
  */
 function setupTitleInput(input, { previewEl, suggestEl, counterEl, onChange }) {
   function completeTag(ctx, tag) {
@@ -272,7 +272,7 @@ function setupTitleInput(input, { previewEl, suggestEl, counterEl, onChange }) {
       .map((t) => `<button type="button" class="suggest-chip" data-tag="${escapeHtml(t)}">#${escapeHtml(t)}</button>`)
       .join('');
     suggestEl.querySelectorAll('.suggest-chip').forEach((btn) => {
-      // mousedown: completa antes de o input perder o foco.
+      // mousedown: completes before the input loses focus.
       btn.addEventListener('mousedown', (e) => {
         e.preventDefault();
         const liveCtx = currentTagPrefix(input.value, input.selectionStart ?? input.value.length);
@@ -296,7 +296,7 @@ function setupTitleInput(input, { previewEl, suggestEl, counterEl, onChange }) {
         const parts = [
           parsed.title
             ? `<span class="preview-text">${escapeHtml(parsed.title)}</span>`
-            : '<span class="preview-text empty">título vazio (usa a 1ª linha do conteúdo)</span>'
+            : '<span class="preview-text empty">empty title (uses the content\'s 1st line)</span>'
         ];
         parsed.tags.forEach((t) => parts.push(`<span class="preview-chip">#${escapeHtml(t)}</span>`));
         previewEl.innerHTML = parts.join('');
@@ -323,19 +323,19 @@ function setupTitleInput(input, { previewEl, suggestEl, counterEl, onChange }) {
   update();
 }
 
-// ---------- Modo rápido ----------
+// ---------- Quick mode ----------
 
 function renderQuickMode() {
   appEl.innerHTML = `
     <div class="quick-container">
       <div class="quick-header">
-        <div class="quick-title">NOVA ATIVIDADE</div>
+        <div class="quick-title">NEW ACTIVITY</div>
         <button class="quick-close" id="quick-close">&times;</button>
       </div>
       <textarea
         id="quick-input"
         class="quick-input"
-        placeholder="Ex: atividade de matemática #faculdade #prova !30"
+        placeholder="E.g. math homework #college #exam !30"
         maxlength="${maxLen()}"
         autofocus
       ></textarea>
@@ -343,13 +343,13 @@ function renderQuickMode() {
       <div class="tag-suggest" id="quick-suggest"></div>
       <div class="quick-meta">
         <div class="quick-hint">
-          <span class="tag">#tag</span> categoriza · <span class="tag">!30</span> <span class="tag">!2h</span> <span class="tag">!1h30</span> alerta · <span class="tag">Tab</span> completa tag · <span class="tag">Enter</span> salva · <span class="tag">Esc</span> fecha
+          <span class="tag">#tag</span> categorizes · <span class="tag">!30</span> <span class="tag">!2h</span> <span class="tag">!1h30</span> alert · <span class="tag">Tab</span> completes a tag · <span class="tag">Enter</span> saves · <span class="tag">Esc</span> closes
         </div>
         <div class="quick-counter" id="quick-counter"></div>
       </div>
       <div class="quick-actions">
-        <button class="btn btn-secondary" id="quick-cancel">Cancelar</button>
-        <button class="btn btn-primary" id="quick-save">Salvar</button>
+        <button class="btn btn-secondary" id="quick-cancel">Cancel</button>
+        <button class="btn btn-primary" id="quick-save">Save</button>
       </div>
     </div>
   `;
@@ -368,7 +368,7 @@ function renderQuickMode() {
       await API.closeQuickWindow();
     } catch (err) {
       console.error(err);
-      toast('Erro ao salvar atividade.');
+      toast('Error saving the activity.');
     }
   }
 
@@ -380,7 +380,7 @@ function renderQuickMode() {
     onChange: (value) => {
       quickDraft = value;
       saveBtn.disabled = value.trim().length === 0;
-      // Enquanto houver rascunho, a janela não se fecha ao perder o foco.
+      // While there's a draft, the window doesn't close when it loses focus.
       API.setQuickDraft(value.trim().length > 0);
     }
   });
@@ -400,20 +400,20 @@ function renderQuickMode() {
   input.setSelectionRange(input.value.length, input.value.length);
 }
 
-// ---------- Modo captura de texto (clipboard) ----------
+// ---------- Text capture mode (clipboard) ----------
 
 function renderClipMode() {
   appEl.innerHTML = `
     <div class="quick-container">
       <div class="quick-header">
-        <div class="quick-title">NOVO TEXTO</div>
+        <div class="quick-title">NEW TEXT</div>
         <button class="quick-close" id="clip-close">&times;</button>
       </div>
       <input
         type="text"
         id="clip-title"
         class="quick-title-input"
-        placeholder="Título (opcional) — use #tag para categorizar"
+        placeholder="Title (optional) — use #tag to categorize"
         maxlength="${maxTitleLen()}"
       >
       <div class="input-preview" id="clip-preview"></div>
@@ -421,17 +421,17 @@ function renderClipMode() {
       <textarea
         id="clip-content"
         class="quick-content"
-        placeholder="Conteúdo a salvar (será colado exatamente como digitado)"
+        placeholder="Content to save (it will be pasted exactly as typed)"
       ></textarea>
       <div class="quick-meta">
         <div class="quick-hint">
-          <span class="tag">#tag</span> no título · <span class="tag">Tab</span> completa · <span class="tag">Enter</span> salva · <span class="tag">Shift+Enter</span> quebra linha · <span class="tag">Esc</span> fecha
+          <span class="tag">#tag</span> in the title · <span class="tag">Tab</span> completes · <span class="tag">Enter</span> saves · <span class="tag">Shift+Enter</span> new line · <span class="tag">Esc</span> closes
         </div>
         <div class="quick-counter" id="clip-counter"></div>
       </div>
       <div class="quick-actions">
-        <button class="btn btn-secondary" id="clip-cancel">Cancelar</button>
-        <button class="btn btn-primary" id="clip-save">Salvar</button>
+        <button class="btn btn-secondary" id="clip-cancel">Cancel</button>
+        <button class="btn btn-primary" id="clip-save">Save</button>
       </div>
     </div>
   `;
@@ -451,7 +451,7 @@ function renderClipMode() {
     clipTitleDraft = titleInput.value;
     clipContentDraft = contentInput.value;
     saveBtn.disabled = contentInput.value.trim().length === 0;
-    // Enquanto houver rascunho, a janela não se fecha ao perder o foco.
+    // While there's a draft, the window doesn't close when it loses focus.
     API.setClipDraft(hasDraft());
   }
 
@@ -476,7 +476,7 @@ function renderClipMode() {
       await API.closeClipWindow();
     } catch (err) {
       console.error(err);
-      toast('Erro ao salvar.');
+      toast('Error saving.');
     }
   }
 
@@ -493,7 +493,7 @@ function renderClipMode() {
         e.preventDefault();
         save();
       } else if (!e.shiftKey) {
-        // Enter no título → foca o conteúdo.
+        // Enter in the title → focuses the content.
         e.preventDefault();
         contentInput.focus();
       }
@@ -506,7 +506,7 @@ function renderClipMode() {
   contentInput.addEventListener('input', syncDraft);
   contentInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
-      // Enter salva; Shift+Enter quebra linha (padrão do textarea).
+      // Enter saves; Shift+Enter adds a new line (the textarea's default).
       if (e.ctrlKey || !e.shiftKey) {
         e.preventDefault();
         save();
@@ -526,7 +526,7 @@ function renderClipMode() {
   syncDraft();
 }
 
-// ---------- Painel de atividades (janela overlay) ----------
+// ---------- Activity panel (overlay window) ----------
 
 function renderPanelMode() {
   appEl.innerHTML = `
@@ -537,9 +537,9 @@ function renderPanelMode() {
 
         </div>
         <nav class="nav">
-          <button data-screen="dashboard" class="${currentScreen === 'dashboard' ? 'active' : ''}">Atividades</button>
+          <button data-screen="dashboard" class="${currentScreen === 'dashboard' ? 'active' : ''}">Activities</button>
           <button data-screen="clipboard" class="${currentScreen === 'clipboard' ? 'active' : ''}">Clipboard</button>
-          <button data-screen="settings" class="${currentScreen === 'settings' ? 'active' : ''}">Configurações</button>
+          <button data-screen="settings" class="${currentScreen === 'settings' ? 'active' : ''}">Settings</button>
         </nav>
       </header>
       <main class="content" id="main-content"></main>
@@ -551,7 +551,7 @@ function renderPanelMode() {
       currentScreen = btn.dataset.screen;
       editingId = null;
       editingEntryId = null;
-      settingsTab = 'geral';
+      settingsTab = 'general';
       settingsDraft = null;
       renderPanelMode();
     });
@@ -570,8 +570,8 @@ function renderScreen() {
 }
 
 /**
- * Re-renderiza a tela atual sem perder o foco nem a posição do cursor —
- * essencial porque os eventos do main chegam enquanto o usuário digita.
+ * Re-renders the current screen without losing focus or the cursor position —
+ * essential because events from main arrive while the user types.
  */
 function rerenderPreservingFocus() {
   const active = document.activeElement;
@@ -586,7 +586,7 @@ function rerenderPreservingFocus() {
     if (el) {
       el.focus();
       if (selStart !== null && el.setSelectionRange) {
-        try { el.setSelectionRange(selStart, selEnd); } catch { /* inputs sem seleção */ }
+        try { el.setSelectionRange(selStart, selEnd); } catch { /* inputs without selection */ }
       }
     }
   }
@@ -617,10 +617,10 @@ function rawTextFor(activity) {
 
 function activityMetaHtml(a, isCompleted) {
   if (isCompleted) {
-    return `Concluída em ${formatTime(a.completedAt)} · Levou ${formatDuration(a.completedAt - a.createdAt)}`;
+    return `Done on ${formatTime(a.completedAt)} · Took ${formatDuration(a.completedAt - a.createdAt)}`;
   }
   const overdue = a.dueAt < Date.now();
-  return `Alerta ${timeUntil(a.dueAt)} · Criada ${formatTime(a.createdAt)}${overdue ? ' · <span class="overdue-badge">atrasada</span>' : ''}`;
+  return `Alert ${timeUntil(a.dueAt)} · Created ${formatTime(a.createdAt)}${overdue ? ' · <span class="overdue-badge">overdue</span>' : ''}`;
 }
 
 function activityCardHtml(a, isCompleted) {
@@ -629,8 +629,8 @@ function activityCardHtml(a, isCompleted) {
       <div class="activity-card editing" data-id="${a.id}">
         <input id="edit-input" class="edit-input" maxlength="${maxLen()}" value="${escapeHtml(editDraft)}">
         <div class="activity-actions">
-          <button class="icon-btn complete" title="Salvar (Enter)" data-action="save-edit">✓</button>
-          <button class="icon-btn" title="Cancelar (Esc)" data-action="cancel-edit">✕</button>
+          <button class="icon-btn complete" title="Save (Enter)" data-action="save-edit">✓</button>
+          <button class="icon-btn" title="Cancel (Esc)" data-action="cancel-edit">✕</button>
         </div>
       </div>
     `;
@@ -643,20 +643,20 @@ function activityCardHtml(a, isCompleted) {
         <div class="activity-text">${escapeHtml(a.text)}</div>
         ${a.tags.length > 0 ? `
           <div class="activity-tags">
-            ${a.tags.map((t) => `<button class="tag-pill" data-tag-filter="${escapeHtml(t)}" title="Filtrar por #${escapeHtml(t)}">#${escapeHtml(t)}</button>`).join('')}
+            ${a.tags.map((t) => `<button class="tag-pill" data-tag-filter="${escapeHtml(t)}" title="Filter by #${escapeHtml(t)}">#${escapeHtml(t)}</button>`).join('')}
           </div>
         ` : ''}
         <div class="activity-meta">${activityMetaHtml(a, isCompleted)}</div>
       </div>
       <div class="activity-actions">
         ${!isCompleted ? `
-          <button class="icon-btn complete" title="Concluir" data-action="complete">✓</button>
-          <button class="icon-btn snooze" title="Adiar alerta em ${a.reminderMinutes} min" data-action="snooze">+${a.reminderMinutes}m</button>
-          <button class="icon-btn" title="Editar" data-action="edit">✎</button>
+          <button class="icon-btn complete" title="Done" data-action="complete">✓</button>
+          <button class="icon-btn snooze" title="Snooze the alert by ${a.reminderMinutes} min" data-action="snooze">+${a.reminderMinutes}m</button>
+          <button class="icon-btn" title="Edit" data-action="edit">✎</button>
         ` : `
-          <button class="icon-btn" title="Reabrir" data-action="reopen">↩</button>
+          <button class="icon-btn" title="Reopen" data-action="reopen">↩</button>
         `}
-        <button class="icon-btn delete" title="Excluir" data-action="delete">🗑</button>
+        <button class="icon-btn delete" title="Delete" data-action="delete">🗑</button>
       </div>
     </div>
   `;
@@ -678,18 +678,18 @@ function renderDashboard(container) {
   container.innerHTML = `
     <div class="quick-add-card">
       <div class="quick-add-row">
-        <input type="text" id="dash-input" placeholder="Adicionar atividade... (N)" maxlength="${maxLen()}" value="${escapeHtml(dashDraft)}">
-        <button class="btn btn-primary" id="dash-add">Adicionar</button>
+        <input type="text" id="dash-input" placeholder="Add an activity... (N)" maxlength="${maxLen()}" value="${escapeHtml(dashDraft)}">
+        <button class="btn btn-primary" id="dash-add">Add</button>
       </div>
       <div class="input-preview" id="dash-preview"></div>
       <div class="tag-suggest" id="dash-suggest"></div>
       <div class="quick-add-help">
-        <strong>#tag</strong> categoriza · <strong>!30</strong>, <strong>!2h</strong> ou <strong>!1h30</strong> define o alerta (padrão: ${defaultMinutes()} min) · <strong>Tab</strong> completa a tag
+        <strong>#tag</strong> categorizes · <strong>!30</strong>, <strong>!2h</strong> or <strong>!1h30</strong> sets the alert (default: ${defaultMinutes()} min) · <strong>Tab</strong> completes the tag
       </div>
     </div>
 
     <div class="toolbar">
-      <input type="search" id="search-input" class="search-input" placeholder="Buscar atividades... (/)" value="${escapeHtml(searchQuery)}">
+      <input type="search" id="search-input" class="search-input" placeholder="Search activities... (/)" value="${escapeHtml(searchQuery)}">
       ${tags.length > 0 ? `
         <div class="tag-filter">
           ${tags.map(([t, count]) => `
@@ -700,20 +700,20 @@ function renderDashboard(container) {
       ` : ''}
     </div>
 
-    <h2 class="section-title">Pendentes (${pending.length})</h2>
+    <h2 class="section-title">Pending (${pending.length})</h2>
     <div class="activities-list" id="pending-list">
       ${pending.length > 0
         ? pending.map((a) => activityCardHtml(a, false)).join('')
-        : `<div class="empty-state">${filtering ? 'Nada encontrado com esse filtro.' : 'Nenhuma atividade pendente. Use o campo acima ou o atalho global para anotar.'}</div>`}
+        : `<div class="empty-state">${filtering ? 'Nothing found with this filter.' : 'No pending activities. Use the field above or the global shortcut to jot one down.'}</div>`}
     </div>
 
     ${completedAll.length > 0 ? `
-      <h2 class="section-title section-completed">Concluídas (${completedAll.length})</h2>
+      <h2 class="section-title section-completed">Done (${completedAll.length})</h2>
       <div class="activities-list" id="completed-list">
         ${completed.map((a) => activityCardHtml(a, true)).join('')}
       </div>
       ${completedAll.length > completed.length ? `
-        <button class="btn btn-secondary btn-inline" id="show-more">Mostrar mais (${completedAll.length - completed.length})</button>
+        <button class="btn btn-secondary btn-inline" id="show-more">Show more (${completedAll.length - completed.length})</button>
       ` : ''}
     ` : ''}
   `;
@@ -726,7 +726,7 @@ function renderDashboard(container) {
     dashDraft = '';
     input.value = '';
     await API.createActivity(text);
-    toast('Atividade adicionada');
+    toast('Activity added');
   }
 
   setupSmartInput(input, {
@@ -777,14 +777,14 @@ function wireActivityActions(container) {
         if (action === 'complete') {
           const a = findActivity(id);
           await API.completeActivity(id);
-          toast(`Concluída — levou ${formatDuration(Date.now() - (a ? a.createdAt : Date.now()))}`);
+          toast(`Done — took ${formatDuration(Date.now() - (a ? a.createdAt : Date.now()))}`);
         } else if (action === 'snooze') {
           const a = findActivity(id);
           const mins = a ? a.reminderMinutes : defaultMinutes();
           await API.snoozeActivity(id, mins);
-          toast(`Alerta adiado ${mins} min`);
+          toast(`Alert snoozed ${mins} min`);
         } else if (action === 'delete') {
-          if (confirm('Tem certeza que deseja excluir esta atividade?')) {
+          if (confirm('Are you sure you want to delete this activity?')) {
             await API.deleteActivity(id);
           }
         } else if (action === 'edit') {
@@ -805,7 +805,7 @@ function wireActivityActions(container) {
           renderScreen();
         } else if (action === 'reopen') {
           await API.reopenActivity(id);
-          toast('Atividade reaberta');
+          toast('Activity reopened');
         }
         return;
       }
@@ -837,7 +837,7 @@ async function saveEdit(id) {
   if (!value) return;
   editingId = null;
   await API.updateActivity(id, value);
-  toast('Atividade atualizada');
+  toast('Activity updated');
 }
 
 function wireEditInput() {
@@ -855,7 +855,7 @@ function wireEditInput() {
   });
 }
 
-// ---------- Aba Clipboard ----------
+// ---------- Clipboard tab ----------
 
 function entryMatchesFilters(e) {
   const q = clipSearchQuery.trim().toLowerCase();
@@ -871,12 +871,12 @@ function entryCardHtml(e) {
   if (e.id === editingEntryId) {
     return `
       <div class="entry-card editing" data-id="${e.id}">
-        <input id="edit-entry-title" class="edit-input" maxlength="${maxTitleLen()}" value="${escapeHtml(editEntryTitleDraft)}" placeholder="Título (use #tag)">
+        <input id="edit-entry-title" class="edit-input" maxlength="${maxTitleLen()}" value="${escapeHtml(editEntryTitleDraft)}" placeholder="Title (use #tag)">
         <div class="tag-suggest" id="edit-entry-suggest"></div>
-        <textarea id="edit-entry-content" class="edit-content" placeholder="Conteúdo">${escapeHtml(editEntryContentDraft)}</textarea>
+        <textarea id="edit-entry-content" class="edit-content" placeholder="Content">${escapeHtml(editEntryContentDraft)}</textarea>
         <div class="edit-actions">
-          <button class="btn btn-primary btn-sm" data-entry-action="save-edit">Salvar</button>
-          <button class="btn btn-secondary btn-sm" data-entry-action="cancel-edit">Cancelar</button>
+          <button class="btn btn-primary btn-sm" data-entry-action="save-edit">Save</button>
+          <button class="btn btn-secondary btn-sm" data-entry-action="cancel-edit">Cancel</button>
         </div>
       </div>
     `;
@@ -889,15 +889,15 @@ function entryCardHtml(e) {
         <div class="entry-content">${escapeHtml(e.content)}</div>
         ${e.tags.length ? `
           <div class="entry-tags">
-            ${e.tags.map((t) => `<button class="tag-pill" data-entry-tag="${escapeHtml(t)}" title="Filtrar por #${escapeHtml(t)}">#${escapeHtml(t)}</button>`).join('')}
+            ${e.tags.map((t) => `<button class="tag-pill" data-entry-tag="${escapeHtml(t)}" title="Filter by #${escapeHtml(t)}">#${escapeHtml(t)}</button>`).join('')}
           </div>
         ` : ''}
-        <div class="entry-meta">Criado ${formatTime(e.createdAt)}${e.copyCount ? ` · Copiado ${e.copyCount}×` : ''}</div>
+        <div class="entry-meta">Created ${formatTime(e.createdAt)}${e.copyCount ? ` · Copied ${e.copyCount}×` : ''}</div>
       </div>
       <div class="entry-actions">
-        <button class="btn btn-primary btn-sm btn-copy" data-entry-action="copy">Copiar</button>
-        <button class="icon-btn" data-entry-action="edit" title="Editar">✎</button>
-        <button class="icon-btn delete" data-entry-action="delete" title="Excluir">🗑</button>
+        <button class="btn btn-primary btn-sm btn-copy" data-entry-action="copy">Copy</button>
+        <button class="icon-btn" data-entry-action="edit" title="Edit">✎</button>
+        <button class="icon-btn delete" data-entry-action="delete" title="Delete">🗑</button>
       </div>
     </div>
   `;
@@ -915,21 +915,21 @@ function renderClipboardScreen(container) {
 
   container.innerHTML = `
     <div class="add-card">
-      <input type="text" id="add-entry-title" placeholder="Título (opcional, use #tag)..." maxlength="${maxTitleLen()}" value="${escapeHtml(addEntryTitleDraft)}">
+      <input type="text" id="add-entry-title" placeholder="Title (optional, use #tag)..." maxlength="${maxTitleLen()}" value="${escapeHtml(addEntryTitleDraft)}">
       <div class="input-preview" id="add-entry-preview"></div>
       <div class="tag-suggest" id="add-entry-suggest"></div>
-      <textarea id="add-entry-content" placeholder="Conteúdo a salvar...">${escapeHtml(addEntryContentDraft)}</textarea>
+      <textarea id="add-entry-content" placeholder="Content to save...">${escapeHtml(addEntryContentDraft)}</textarea>
       <div class="add-row">
-        <div class="quick-add-help"><strong>#tag</strong> no título categoriza · <strong>Ctrl+Enter</strong> adiciona · o conteúdo é salvo exatamente como digitado</div>
-        <button class="btn btn-primary" id="add-entry-btn">Adicionar</button>
+        <div class="quick-add-help"><strong>#tag</strong> in the title categorizes · <strong>Ctrl+Enter</strong> adds · the content is saved exactly as typed</div>
+        <button class="btn btn-primary" id="add-entry-btn">Add</button>
       </div>
     </div>
 
     <div class="toolbar">
-      <input type="search" id="clip-search" class="search-input" placeholder="Buscar textos... (/)" value="${escapeHtml(clipSearchQuery)}">
+      <input type="search" id="clip-search" class="search-input" placeholder="Search texts... (/)" value="${escapeHtml(clipSearchQuery)}">
       <div class="panel-sort" id="clip-sort">
-        <button data-sort="recent" class="${clipSort === 'recent' ? 'active' : ''}">Recentes</button>
-        <button data-sort="copied" class="${clipSort === 'copied' ? 'active' : ''}">Copiados</button>
+        <button data-sort="recent" class="${clipSort === 'recent' ? 'active' : ''}">Recent</button>
+        <button data-sort="copied" class="${clipSort === 'copied' ? 'active' : ''}">Most copied</button>
       </div>
       ${tags.length > 0 ? `
         <div class="tag-filter">
@@ -941,11 +941,11 @@ function renderClipboardScreen(container) {
       ` : ''}
     </div>
 
-    <h2 class="section-title">Textos (${entries.length})</h2>
+    <h2 class="section-title">Texts (${entries.length})</h2>
     <div class="entries-list" id="entries-list">
       ${entries.length > 0
         ? entries.map((e) => entryCardHtml(e)).join('')
-        : `<div class="empty-state">${filtering ? 'Nada encontrado com esse filtro.' : 'Nenhum texto salvo. Use o formulário acima ou o atalho global.'}</div>`}
+        : `<div class="empty-state">${filtering ? 'Nothing found with this filter.' : 'No saved texts. Use the form above or the global shortcut.'}</div>`}
     </div>
   `;
 
@@ -964,7 +964,7 @@ function renderClipboardScreen(container) {
     titleInput.value = '';
     contentInput.value = '';
     await API.createEntry(title, content);
-    toast('Texto salvo');
+    toast('Text saved');
   }
 
   setupTitleInput(titleInput, {
@@ -1028,7 +1028,7 @@ function wireEntryActions(container) {
 
         if (action === 'copy') {
           await API.copyEntry(id);
-          toast('Copiado!');
+          toast('Copied!');
         } else if (action === 'edit') {
           const entry = findEntry(id);
           if (!entry) return;
@@ -1042,7 +1042,7 @@ function wireEntryActions(container) {
             t.setSelectionRange(t.value.length, t.value.length);
           }
         } else if (action === 'delete') {
-          if (confirm('Tem certeza que deseja excluir este texto?')) {
+          if (confirm('Are you sure you want to delete this text?')) {
             await API.deleteEntry(id);
           }
         } else if (action === 'save-edit') {
@@ -1086,7 +1086,7 @@ async function saveEntryEdit(id) {
   const title = titleInput ? titleInput.value : editEntryTitleDraft;
   editingEntryId = null;
   await API.updateEntry(id, title, content);
-  toast('Texto atualizado');
+  toast('Text updated');
 }
 
 function wireEntryEditInputs() {
@@ -1123,33 +1123,33 @@ function wireEntryEditInputs() {
   });
 }
 
-// ---------- Configurações ----------
+// ---------- Settings ----------
 
-// Notificações e Volume viraram uma só — as duas falavam do mesmo alerta, e
-// separar obrigava a ir e voltar para ajustar uma coisa.
+// Notifications and Volume became one — both were about the same alert, and
+// splitting them meant going back and forth to adjust one thing.
 const SETTINGS_TABS = [
-  { key: 'geral', label: 'Geral' },
-  { key: 'atalhos', label: 'Atalhos' },
-  { key: 'alertas', label: 'Alertas' }
+  { key: 'general', label: 'General' },
+  { key: 'shortcuts', label: 'Shortcuts' },
+  { key: 'alerts', label: 'Alerts' }
 ];
 
 /**
- * As edições ficam num rascunho separado de `state.config` — assim trocar de
- * aba (o que re-renderiza só a aba ativa) não perde o que foi digitado nas
- * outras. `null` sinaliza "recém-entrou na tela", e é reconstruído a partir do
- * config salvo; fica `null` de novo depois de salvar com sucesso.
+ * Edits live in a draft apart from `state.config` — so switching tabs
+ * (which re-renders only the active tab) doesn't lose what was typed in the
+ * others. `null` means "just entered the screen", and it is rebuilt from the
+ * saved config; it goes back to `null` after a successful save.
  */
 function renderSettings(container) {
   if (!settingsDraft) settingsDraft = { ...state.config };
 
   container.innerHTML = `
-    <h2 class="section-title">Configurações</h2>
+    <h2 class="section-title">Settings</h2>
     <div class="settings-tabs">
       ${SETTINGS_TABS.map((t) => `<button data-tab="${t.key}" class="${settingsTab === t.key ? 'active' : ''}">${t.label}</button>`).join('')}
     </div>
     <div class="settings-form" id="settings-tab-body"></div>
     <div class="settings-actions settings-footer" id="settings-footer">
-      <button class="btn btn-primary" id="btn-save-cfg">Salvar configurações</button>
+      <button class="btn btn-primary" id="btn-save-cfg">Save settings</button>
     </div>
   `;
 
@@ -1161,9 +1161,9 @@ function renderSettings(container) {
   });
 
   const body = document.getElementById('settings-tab-body');
-  if (settingsTab === 'geral') renderGeneralTab(body);
-  else if (settingsTab === 'atalhos') renderShortcutsTab(body);
-  else if (settingsTab === 'alertas') renderAlertsTab(body);
+  if (settingsTab === 'general') renderGeneralTab(body);
+  else if (settingsTab === 'shortcuts') renderShortcutsTab(body);
+  else if (settingsTab === 'alerts') renderAlertsTab(body);
 
   document.getElementById('btn-save-cfg').addEventListener('click', async () => {
     const saveBtn = document.getElementById('btn-save-cfg');
@@ -1179,72 +1179,72 @@ function renderSettings(container) {
       soundVolume: parseInt(settingsDraft.soundVolume, 10)
     };
 
-    // Registrar o atalho recarrega o compositor: pode levar um instante.
+    // Registering the shortcut reloads the compositor: it can take a moment.
     saveBtn.disabled = true;
-    saveBtn.textContent = 'Salvando...';
+    saveBtn.textContent = 'Saving...';
     try {
       await API.saveConfig(patch);
       settingsDraft = null;
       await renderShortcutStatus();
-      toast('Configurações salvas');
+      toast('Settings saved');
     } finally {
       saveBtn.disabled = false;
-      saveBtn.textContent = 'Salvar configurações';
+      saveBtn.textContent = 'Save settings';
     }
   });
 }
 
 /**
- * A aba Geral.
+ * The General tab.
  *
- * Agrupada por assunto e não por campo solto: "Atividades" e "Clipboard" são as
- * duas coisas que se configura aqui, e cada uma tem os seus números.
+ * Grouped by subject rather than by loose field: "Activities" and "Clipboard" are
+ * the two things configured here, and each has its own numbers.
  */
 function renderGeneralTab(body) {
   body.innerHTML = `
-    <div class="cfg-secao">
-      <h4 class="cfg-titulo">Atividades</h4>
+    <div class="cfg-section">
+      <h4 class="cfg-heading">Activities</h4>
 
       <div class="form-group">
-        <label>Tempo padrão do alerta</label>
-        <div class="cfg-numero">
+        <label>Default alert time</label>
+        <div class="cfg-number">
           <input type="number" id="cfg-default-minutes" min="1" value="${settingsDraft.defaultReminderMinutes}">
-          <span>minutos</span>
+          <span>minutes</span>
         </div>
-        <div class="form-hint">Vale quando você não escreve <code>!N</code> na atividade.</div>
+        <div class="form-hint">Applies when you don't write <code>!N</code> in the activity.</div>
       </div>
 
       <div class="form-group">
-        <label>Limite do texto</label>
-        <div class="cfg-numero">
+        <label>Text limit</label>
+        <div class="cfg-number">
           <input type="number" id="cfg-max-length" min="10" value="${settingsDraft.maxTextLength}">
-          <span>caracteres</span>
+          <span>characters</span>
         </div>
-        <div class="form-hint">Segura a atividade curta o bastante para caber num alerta.</div>
+        <div class="form-hint">Keeps the activity short enough to fit in an alert.</div>
       </div>
     </div>
 
-    <div class="cfg-secao">
-      <h4 class="cfg-titulo">Clipboard</h4>
+    <div class="cfg-section">
+      <h4 class="cfg-heading">Clipboard</h4>
 
       <div class="form-group">
-        <label>Limite do título</label>
-        <div class="cfg-numero">
+        <label>Title limit</label>
+        <div class="cfg-number">
           <input type="number" id="cfg-max-title" min="10" value="${settingsDraft.maxTitleLength}">
-          <span>caracteres</span>
+          <span>characters</span>
         </div>
-        <div class="form-hint">Só o título. O conteúdo não tem limite — é o que vai ser colado.</div>
+        <div class="form-hint">Only the title. The content has no limit — it is what gets pasted.</div>
       </div>
     </div>
 
-    <div class="cfg-secao">
-      <h4 class="cfg-titulo">Sistema</h4>
+    <div class="cfg-section">
+      <h4 class="cfg-heading">System</h4>
 
-      <label class="cfg-chave">
+      <label class="cfg-toggle">
         <input type="checkbox" id="cfg-autostart" ${settingsDraft.startOnLogin ? 'checked' : ''}>
         <span>
-          Iniciar junto com o sistema
-          <em>Os alertas só chegam com o app rodando.</em>
+          Start with the system
+          <em>Alerts only arrive while the app is running.</em>
         </span>
       </label>
     </div>
@@ -1268,31 +1268,31 @@ function renderGeneralTab(body) {
 function renderShortcutsTab(body) {
   body.innerHTML = `
     <div class="form-group">
-      <label>Atalho — Nova atividade</label>
-      <input type="text" id="cfg-shortcut" class="shortcut-input" value="${escapeHtml(settingsDraft.globalShortcut || '')}" placeholder="Clique aqui e pressione as teclas" readonly>
+      <label>Shortcut — New activity</label>
+      <input type="text" id="cfg-shortcut" class="shortcut-input" value="${escapeHtml(settingsDraft.globalShortcut || '')}" placeholder="Click here and press the keys" readonly>
       <div id="shortcut-conflict" class="shortcut-status"></div>
     </div>
 
     <div class="form-group">
-      <label>Atalho — Novo texto (clipboard)</label>
-      <input type="text" id="cfg-shortcut-clip" class="shortcut-input" value="${escapeHtml(settingsDraft.globalShortcutClip || '')}" placeholder="Clique aqui e pressione as teclas" readonly>
+      <label>Shortcut — New text (clipboard)</label>
+      <input type="text" id="cfg-shortcut-clip" class="shortcut-input" value="${escapeHtml(settingsDraft.globalShortcutClip || '')}" placeholder="Click here and press the keys" readonly>
       <div id="shortcut-clip-conflict" class="shortcut-status"></div>
     </div>
 
     <div class="form-group">
-      <label>Atalho — Abrir painel lateral</label>
-      <input type="text" id="cfg-shortcut-panel" class="shortcut-input" value="${escapeHtml(settingsDraft.globalShortcutPanel || '')}" placeholder="Clique aqui e pressione as teclas" readonly>
+      <label>Shortcut — Open the panel</label>
+      <input type="text" id="cfg-shortcut-panel" class="shortcut-input" value="${escapeHtml(settingsDraft.globalShortcutPanel || '')}" placeholder="Click here and press the keys" readonly>
       <div id="shortcut-panel-conflict" class="shortcut-status"></div>
       <div class="form-hint">
-        Clique no campo e pressione a combinação desejada. Ao salvar, o serviço registra
-        os três atalhos no seu ambiente sozinho — você não precisa editar nenhum arquivo
-        de configuração.
+        Click the field and press the combination you want. When you save, the service
+        registers all three shortcuts in your environment on its own — you don't need to
+        edit any config file.
       </div>
       <div id="shortcut-status" class="shortcut-status"></div>
       <div class="settings-actions">
-        <button class="btn btn-secondary btn-inline" id="btn-test-quick">Testar nova atividade</button>
-        <button class="btn btn-secondary btn-inline" id="btn-test-clip">Testar novo texto</button>
-        <button class="btn btn-secondary btn-inline" id="btn-test-panel">Testar painel lateral</button>
+        <button class="btn btn-secondary btn-inline" id="btn-test-quick">Test new activity</button>
+        <button class="btn btn-secondary btn-inline" id="btn-test-clip">Test new text</button>
+        <button class="btn btn-secondary btn-inline" id="btn-test-panel">Test panel</button>
       </div>
     </div>
   `;
@@ -1311,57 +1311,57 @@ function renderShortcutsTab(body) {
 }
 
 /**
- * Alertas: a notificação e o som dela, na mesma tela.
+ * Alerts: the notification and its sound, on the same screen.
  *
- * Eram duas abas, e a separação obrigava a ir e voltar para ajustar uma coisa
- * só — ligar o som numa aba e escolher o volume em outra.
+ * They used to be two tabs, and the split meant going back and forth to adjust
+ * one thing — turning the sound on in one tab and picking the volume in another.
  */
 function renderAlertsTab(body) {
   const volume = Number.isFinite(Number(settingsDraft.soundVolume)) ? Number(settingsDraft.soundVolume) : 60;
   body.innerHTML = `
-    <div class="cfg-secao">
-      <h4 class="cfg-titulo">Som do alerta</h4>
+    <div class="cfg-section">
+      <h4 class="cfg-heading">Alert sound</h4>
 
-      <label class="cfg-chave">
+      <label class="cfg-toggle">
         <input type="checkbox" id="cfg-sound" ${settingsDraft.soundEnabled ? 'checked' : ''}>
         <span>
-          Tocar um chime junto com a notificação
-          <em>Volume próprio, independente do volume geral do sistema.</em>
+          Play a chime with the notification
+          <em>Its own volume, independent of the system's overall volume.</em>
         </span>
       </label>
 
-      <div class="form-group" id="cfg-volume-bloco" class="${settingsDraft.soundEnabled ? '' : 'oculto'}">
+      <div class="form-group" id="cfg-volume-block" class="${settingsDraft.soundEnabled ? '' : 'is-hidden'}">
         <div class="volume-row">
           <input type="range" id="cfg-sound-volume" min="0" max="100" step="5" value="${volume}">
           <span class="volume-value" id="cfg-sound-volume-value">${volume}%</span>
-          <button class="btn btn-secondary btn-inline" id="btn-test-sound">Testar</button>
+          <button class="btn btn-secondary btn-inline" id="btn-test-sound">Test</button>
         </div>
       </div>
     </div>
 
-    <div class="cfg-secao">
-      <h4 class="cfg-titulo">Repetição</h4>
-      <p class="cfg-nota">
-        O alerta repete sozinho no intervalo da própria atividade (o <code>!N</code>)
-        até você concluí-la. Não há o que configurar aqui — avisar uma vez e sumir
-        é como um lembrete deixa de servir.
+    <div class="cfg-section">
+      <h4 class="cfg-heading">Repetition</h4>
+      <p class="cfg-note">
+        The alert repeats on its own at the activity's own interval (the <code>!N</code>)
+        until you mark it done. There's nothing to configure here — warning once and
+        vanishing is how a reminder stops being useful.
       </p>
     </div>
   `;
 
   const chave = document.getElementById('cfg-sound');
-  const bloco = document.getElementById('cfg-volume-bloco');
+  const bloco = document.getElementById('cfg-volume-block');
   const range = document.getElementById('cfg-sound-volume');
-  const rotulo = document.getElementById('cfg-sound-volume-value');
+  const volumeLabel = document.getElementById('cfg-sound-volume-value');
 
-  bloco.classList.toggle('oculto', !chave.checked);
+  bloco.classList.toggle('is-hidden', !chave.checked);
   chave.addEventListener('change', (e) => {
     settingsDraft.soundEnabled = e.target.checked;
-    bloco.classList.toggle('oculto', !e.target.checked);
+    bloco.classList.toggle('is-hidden', !e.target.checked);
   });
   range.addEventListener('input', () => {
     settingsDraft.soundVolume = Number(range.value);
-    rotulo.textContent = `${range.value}%`;
+    volumeLabel.textContent = `${range.value}%`;
   });
   document.getElementById('btn-test-sound')
     .addEventListener('click', () => API.testSound(Number(range.value)));
@@ -1406,8 +1406,8 @@ async function renderShortcutStatus() {
       const combos = `${status.shortcut} / ${status.shortcutClip} / ${status.shortcutPanel}`;
       el.textContent =
         status.environment === 'hyprland'
-          ? `Atalhos ativos — registrados no Hyprland pelo serviço (${combos}).`
-          : `Atalhos globais ativos (${combos}).`;
+          ? `Shortcuts active — registered in Hyprland by the service (${combos}).`
+          : `Global shortcuts active (${combos}).`;
       el.className = 'shortcut-status ok';
     } else if (status.error) {
       el.textContent = status.error;
@@ -1422,8 +1422,8 @@ async function renderShortcutStatus() {
 }
 
 /**
- * Avisa se a combinação escolhida já pertence a outro atalho do compositor —
- * salvar sobrescreve o bind antigo.
+ * Warns if the chosen combination already belongs to another compositor
+ * shortcut — saving overwrites the old bind.
  */
 async function renderShortcutConflict(accelerator, elId) {
   const el = document.getElementById(elId);
@@ -1431,7 +1431,7 @@ async function renderShortcutConflict(accelerator, elId) {
   try {
     const conflict = await API.checkShortcutConflict(accelerator);
     if (conflict) {
-      el.textContent = `Atenção: ${accelerator} já é usado por "${conflict}". Salvar vai substituir esse atalho.`;
+      el.textContent = `Heads up: ${accelerator} is already used by "${conflict}". Saving will replace that shortcut.`;
       el.className = 'shortcut-status warn';
     } else {
       el.textContent = '';
@@ -1448,7 +1448,7 @@ function setupShortcutCapture(input, configKey, conflictElId) {
   function startRecording() {
     recording = true;
     input.classList.add('recording');
-    input.value = 'Pressione as teclas...';
+    input.value = 'Press the keys...';
     input.blur();
     input.focus();
   }
@@ -1484,14 +1484,14 @@ function setupShortcutCapture(input, configKey, conflictElId) {
   });
 }
 
-// ---------- Atalhos de teclado do painel ----------
+// ---------- Panel keyboard shortcuts ----------
 
 function setupPanelKeyboard() {
   document.addEventListener('keydown', (e) => {
     const tag = document.activeElement && document.activeElement.tagName;
     const typing = tag === 'INPUT' || tag === 'TEXTAREA';
 
-    // "/" foca a busca da aba atual — atividades ou clipboard.
+    // "/" focuses the current tab's search — activities or clipboard.
     if ((e.key === '/' && !typing) || (e.ctrlKey && e.key.toLowerCase() === 'f')) {
       e.preventDefault();
       if (currentScreen !== 'dashboard' && currentScreen !== 'clipboard') {
@@ -1531,7 +1531,7 @@ function setupPanelKeyboard() {
   });
 }
 
-// ---------- Inicialização ----------
+// ---------- Startup ----------
 
 async function init() {
   state = await API.getState();
@@ -1544,13 +1544,13 @@ async function init() {
     renderPanelMode();
     setupPanelKeyboard();
 
-    // Mantém os tempos relativos ("alerta em X min") atualizados.
+    // Keeps the relative times ("alert in X min") up to date.
     setInterval(() => {
       if (currentScreen === 'dashboard') rerenderPreservingFocus();
     }, 60000);
   }
 
-  // Eventos do main.
+  // Events from main.
   API.on('state:reload', (newState) => {
     state = newState;
     refreshPanel();

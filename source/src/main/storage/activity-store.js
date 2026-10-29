@@ -28,8 +28,8 @@ function normalizeActivity(raw = {}) {
   };
 }
 
-// O arquivo só é tocado por este processo, então dá para ler uma vez e
-// trabalhar em memória; o disco é atualizado a cada gravação.
+// The file is only touched by this process, so it can be read once and
+// worked on in memory; the disk is updated on every write.
 let cache = null;
 
 function loadState() {
@@ -94,13 +94,13 @@ function completeActivity(id) {
   return state.activities[index];
 }
 
-/** Adiar mexe só no vencimento; o intervalo do `!N` continua o mesmo. */
+/** Snoozing only moves the due time; the `!N` interval stays the same. */
 function snoozeActivity(id, minutes) {
   if (!getActivity(id)) return null;
   return saveActivity({ id, dueAt: Date.now() + minutes * 60 * 1000 });
 }
 
-/** Reabrir volta para pendente e recomeça a contagem do alerta a partir de agora. */
+/** Reopening goes back to pending and restarts the alert countdown from now. */
 function reopenActivity(id) {
   const current = getActivity(id);
   if (!current) return null;
@@ -120,7 +120,7 @@ function exportAll() {
 
 function importAll(data) {
   if (!data || !Array.isArray(data.activities)) {
-    throw new Error('Arquivo de backup inválido.');
+    throw new Error('Invalid backup file.');
   }
   const state = {
     version: data.version || 1,

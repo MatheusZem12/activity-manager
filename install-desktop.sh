@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 #
-# Instala (ou remove) o Activity Manager como um aplicativo do desktop: cria o
-# atalho no menu de aplicativos e registra o ícone. O atalho aponta direto para
-# o código em source/, então qualquer alteração no código já vale no próximo
-# lançamento — não é preciso reinstalar a cada atualização.
+# Installs (or removes) Activity Manager as a desktop application: creates the
+# launcher in the applications menu and registers the icon. The launcher points straight
+# at the code in source/, so any code change already applies on the next
+# launch — there's no need to reinstall after every update.
 #
-# Uso:
-#   ./install-desktop.sh              instala/atualiza o atalho e o ícone
-#   ./install-desktop.sh --uninstall  remove o atalho e os ícones
+# Usage:
+#   ./install-desktop.sh              installs/updates the launcher and the icon
+#   ./install-desktop.sh --uninstall  removes the launcher and the icons
 set -euo pipefail
 
 APP_ID="activity-manager"
 APP_NAME="Activity Manager"
-COMMENT="Atividades com alertas e textos reutilizáveis do clipboard, tudo local"
+COMMENT="Activities with alerts and reusable clipboard texts, all local"
 CATEGORIES="Utility;Productivity;"
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -37,31 +37,31 @@ if [[ "${1:-}" == "--uninstall" ]]; then
   update-desktop-database "$APP_DIR" 2>/dev/null || true
   gtk-update-icon-cache -f "$ICON_ROOT" 2>/dev/null || true
 
-  # Desfaz o que o serviço escreveu no Hyprland (atalho, autostart, window rules).
+  # Undoes what the service wrote to Hyprland (shortcuts, autostart, window rules).
   if [[ -f "$HYPR_MANAGED" ]]; then
     rm -f "$HYPR_MANAGED"
-    echo "  removido: $HYPR_MANAGED"
+    echo "  removed: $HYPR_MANAGED"
   fi
   if [[ -f "$HYPR_CONF" ]] && grep -q "${APP_ID}.conf" "$HYPR_CONF"; then
     cp "$HYPR_CONF" "${HYPR_CONF}.bak.$(date +%s)"
-    # "Atalho"/"Atalhos": o comentário mudou de singular para plural quando o
-    # clipboard entrou no app — versões antigas ainda têm o singular no arquivo.
-    sed -i "/# Atalhos\? do Activity Manager/d; \|${APP_ID}\.conf|d" "$HYPR_CONF"
+    # The comment line came in three forms over time: "Atalho"/"Atalhos do Activity
+    # Manager" (older Portuguese versions) and "Activity Manager shortcuts".
+    sed -i "/# Atalhos\? do Activity Manager/d; /# Activity Manager shortcuts/d; \|${APP_ID}\.conf|d" "$HYPR_CONF"
     hyprctl reload > /dev/null 2>&1 || true
-    echo "  removido o 'source' do $HYPR_CONF (backup criado)"
+    echo "  removed the 'source' line from $HYPR_CONF (backup created)"
   fi
 
-  echo "Removido: $APP_NAME"
+  echo "Removed: $APP_NAME"
   exit 0
 fi
 
-# Garante as dependências (o binário standalone do Electron precisa existir).
+# Makes sure the dependencies exist (the standalone Electron binary must be there).
 if [[ ! -x "$ELECTRON" ]]; then
-  echo "Dependências não encontradas — rodando 'npm install' em source/..."
+  echo "Dependencies not found — running 'npm install' in source/..."
   ( cd "$SRC" && npm install )
 fi
 
-# Renderiza o ícone em vários tamanhos + versão vetorial.
+# Renders the icon in several sizes + a vector version.
 for size in 512 256 128 64 48 32; do
   out="$ICON_ROOT/${size}x${size}/apps"
   mkdir -p "$out"
@@ -70,8 +70,8 @@ done
 mkdir -p "$ICON_ROOT/scalable/apps"
 cp "$SVG" "$ICON_ROOT/scalable/apps/${APP_ID}.svg"
 
-# Cria o atalho. O Exec chama o binário standalone do Electron por caminho
-# absoluto, então não depende de node/npm/nvm estarem no PATH da sessão gráfica.
+# Creates the launcher. Exec calls the standalone Electron binary by absolute
+# path, so it doesn't depend on node/npm/nvm being on the graphical session's PATH.
 mkdir -p "$APP_DIR"
 cat > "$DESKTOP" <<EOF
 [Desktop Entry]
@@ -88,15 +88,15 @@ StartupWMClass=$APP_ID
 X-GNOME-Autostart-enabled=true
 EOF
 
-# Segundo lançador, só para abrir a janela rápida. No Hyprland o próprio app já
-# registra o atalho global (Configurações → Atalho global); isto aqui existe
-# para outros ambientes e para quem quiser chamar pelo lançador de apps.
+# A second launcher, just to open the quick window. On Hyprland the app itself
+# already registers the global shortcut (Settings → Shortcuts); this exists for
+# other environments and for whoever wants to call it from the app launcher.
 cat > "$QUICK_DESKTOP" <<EOF
 [Desktop Entry]
 Type=Application
 Version=1.0
-Name=$APP_NAME — Nova atividade
-Comment=Abre a janela rápida do $APP_NAME
+Name=$APP_NAME — New activity
+Comment=Opens $APP_NAME's quick window
 Exec=$SRC/bin/am-trigger.sh quick
 Path=$SRC
 Icon=$APP_ID
@@ -106,13 +106,13 @@ StartupWMClass=$APP_ID
 NoDisplay=true
 EOF
 
-# Lançador para abrir a janela rápida de captura de texto (clipboard).
+# A launcher to open the quick text capture window (clipboard).
 cat > "$CLIP_DESKTOP" <<EOF
 [Desktop Entry]
 Type=Application
 Version=1.0
-Name=$APP_NAME — Novo texto
-Comment=Abre a janela de captura de texto do $APP_NAME
+Name=$APP_NAME — New text
+Comment=Opens $APP_NAME's text capture window
 Exec=$SRC/bin/am-trigger.sh clip
 Path=$SRC
 Icon=$APP_ID
@@ -122,13 +122,13 @@ StartupWMClass=$APP_ID
 NoDisplay=true
 EOF
 
-# Lançador para abrir o painel de atividades (a janela overlay encostada na borda).
+# A launcher to open the activity panel.
 cat > "$PANEL_DESKTOP" <<EOF
 [Desktop Entry]
 Type=Application
 Version=1.0
-Name=$APP_NAME — Painel
-Comment=Abre o painel de atividades do $APP_NAME
+Name=$APP_NAME — Panel
+Comment=Opens $APP_NAME's activity panel
 Exec=$SRC/bin/am-trigger.sh panel
 Path=$SRC
 Icon=$APP_ID
@@ -141,9 +141,9 @@ EOF
 update-desktop-database "$APP_DIR" 2>/dev/null || true
 gtk-update-icon-cache -f "$ICON_ROOT" 2>/dev/null || true
 
-echo "Instalado: $APP_NAME"
-echo "  atalho: $DESKTOP"
-echo "  janela rápida: $QUICK_DESKTOP"
-echo "  novo texto (clipboard): $CLIP_DESKTOP"
-echo "  painel de atividades: $PANEL_DESKTOP"
-echo "  Procure por \"$APP_NAME\" no seu lançador de aplicativos."
+echo "Installed: $APP_NAME"
+echo "  launcher: $DESKTOP"
+echo "  quick window: $QUICK_DESKTOP"
+echo "  new text (clipboard): $CLIP_DESKTOP"
+echo "  activity panel: $PANEL_DESKTOP"
+echo "  Look for \"$APP_NAME\" in your application launcher."

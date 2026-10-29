@@ -1,7 +1,7 @@
-# ---- app de desktop ----
+# ---- desktop app ----
 source/node_modules/
 source/package-lock.json
 
-# ---- ruído local ----
+# ---- local noise ----
 *.log
 .DS_Store
